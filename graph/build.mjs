@@ -124,6 +124,10 @@ for (const file of files) {
     content: parsed ? parsed.content : raw.trim()
   });
   if (!fm.layer) warnings.push(`${rel}: 未标注 layer（归入"未分层"）`);
+  if (!fm.difficulty) warnings.push(`${rel}: 未标注 difficulty（入门/进阶/深入，判据见 docs/content-style-guide.md §5）`);
+  if (!nodes[nodes.length - 1].summary) {
+    warnings.push(`${rel}: 正文缺少「> **一句话**：…」大白话摘要（展示在图谱 tooltip 与笔记面板，见 docs/content-style-guide.md §2）`);
+  }
 }
 
 const edgeKeys = new Set();

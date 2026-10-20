@@ -1,10 +1,13 @@
 # llm_learn — 大模型技术学习仓库
 
-个人大模型（LLM）技术学习项目：**知识点笔记 + 可交互知识图谱**。
+个人大模型（LLM）技术学习项目：**知识点笔记 + 可交互知识图谱 + AI 全局助手**。
+
+> **贡献者 / AI 助手必读**：修改本项目任何代码前，先读 [AGENTS.md](AGENTS.md)（协作规范）与 [SPEC.md](SPEC.md)（产品需求规范，本项目功能需求的唯一事实来源）。
 
 - 每学一个新知识点，就在 `notes/` 下写一篇带 frontmatter 的 markdown 笔记；
 - 运行一条构建命令，`graph/` 前端项目就会把它变成知识图谱上的一个节点；
-- 打开 `graph/index.html`，点击节点即可阅读对应知识点的学习内容。
+- 打开 `graph/index.html`，点击节点即可阅读对应知识点的学习内容；
+- 随时向 AI 助手提问，回答可一键沉淀为知识点，并与已有知识自动整合去重（见 SPEC.md）。
 
 ## 目录结构
 
@@ -17,6 +20,8 @@ llm_learn/
 │   ├── build.mjs          # 构建脚本：扫描 notes/ 生成图谱数据
 │   ├── data/knowledge.js  # 构建产物（随仓库提交，双击 index.html 即可看）
 │   └── js/ css/           # 图谱渲染代码与样式
+├── SPEC.md                # 产品需求规范（必读）
+├── AGENTS.md              # 协作规范（AI 助手与贡献者必读）
 ├── README.md
 └── .gitignore
 ```
@@ -46,7 +51,7 @@ sources:                            # 参考资料（markdown 链接）
 正文开始，这里写学习内容（Markdown 任意写，支持表格、代码块、ASCII 图）。
 ```
 
-> 知识体系的多维模型（领域分类 × 技术层次 × 学习状态 × 学习路径规划）见 [docs/knowledge-dimensions-plan.md](docs/knowledge-dimensions-plan.md)。
+> 项目规范：[SPEC.md](SPEC.md)（产品需求规范）· [AGENTS.md](AGENTS.md)（协作约定）· [docs/knowledge-dimensions-plan.md](docs/knowledge-dimensions-plan.md)（知识五维模型）· [docs/content-style-guide.md](docs/content-style-guide.md)（内容与文案规范：双受众 + 大白话）。
 
 ## 知识图谱说明
 

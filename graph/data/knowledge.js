@@ -1,6 +1,6 @@
 // 本文件由 graph/build.mjs 自动生成，请勿手改；新增笔记后重新运行 npm run build。
 window.KNOWLEDGE_DATA = {
-  "generatedAt": "2026-10-20T08:20:23.353Z",
+  "generatedAt": "2026-10-20T08:40:21.370Z",
   "categories": [
     "Agent 系统",
     "大模型应用",
