@@ -312,6 +312,100 @@
     return (neighbors[id] || []).map(function (x) { return nodesById[x]; }).filter(Boolean);
   }
 
+  function panelHtml(n) {
+    var rel = relatedOf(n.id).map(function (r) {
+      return '<button class="chip" data-id="' + esc(r.id) + '">' + esc(r.title) + '</button>';
+    }).join('') || '<span class="muted">（暂无，可在笔记 frontmatter 的 links 里声明）</span>';
+
+    var catColor = categoryColor(n.category);
+    var tags = (n.tags || []).map(function (t) {
+      return '<span class="chip tag">#' + esc(t) + '</span>';
+    }).join('');
+
+    return '<div class="panel-head">' +
+      '  <div class="panel-title-row">' +
+      '    <div class="panel-title">' + esc(n.title) + '</div>' +
+      '    <button class="icon-btn btn-enlarge" title="放大查看">⛶</button>' +
+      '  </div>' +
+      '  <div class="panel-meta">' +
+      '    <span class="chip" style="background:' + catColor + '22;color:' + catColor + ';border:1px solid ' + catColor + '55">' + esc(n.category) + '</span>' +
+      '    <span class="chip ' + (n.status === 'todo' ? 'todo' : 'ok') + '">' + (n.status === 'todo' ? '待学习' : '已学习') + '</span>' +
+      tags +
+      '  </div>' +
+      '  <div class="panel-file">' + esc(n.file) + ' · 更新于 ' + esc(n.updatedAt || '-') + '</div>' +
+      '</div>' +
+      '<div class="panel-side panel-level">' + levelSection(n) + '</div>' +
+      '<div class="panel-body md">' + mdToHtml(n.content || '（暂无内容）') + '</div>' +
+      '<div class="panel-side">' +
+      '  <div class="side-title">关联知识点</div>' +
+      '  <div class="side-chips">' + rel + '</div>' +
+      '  <div class="side-title">参考资料</div>' +
+      '  <div class="side-sources">' + (sourceLinks(n) || '<span class="muted">（暂无）</span>') + '</div>' +
+      '</div>';
+  }
+
+  /** 给面板/阅读视图里的交互元素绑定事件；inReader 时关联节点跳转在阅读视图内完成 */
+  function bindPanelActions(root, id, inReader) {
+    root.querySelectorAll('button.chip[data-id]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (inReader) openReader(b.dataset.id); else openPanel(b.dataset.id);
+      });
+    });
+    root.querySelectorAll('.lvl-btn').forEach(function (b) {
+      b.addEventListener('click', function () { setLevel(id, Number(b.dataset.level)); });
+    });
+  }
+
+  function openPanel(id) {
+    var n = nodesById[id];
+    if (!n) return;
+    state.selected = id;
+
+    panelEl.classList.remove('empty');
+    panelEl.innerHTML = panelHtml(n);
+    bindPanelActions(panelEl, id, false);
+    panelEl.querySelector('.btn-enlarge').addEventListener('click', function () { openReader(id); });
+    panelEl.scrollTop = 0;
+  }
+
+  /* ---------- 放大阅读视图（全屏查看笔记） ---------- */
+  var readerOverlayEl = document.getElementById('reader-overlay');
+  var readerBodyEl = document.getElementById('reader-body');
+  var readerTitleEl = document.getElementById('reader-node-title');
+  var readerFontSize = 17.5;
+
+  function applyReaderFont() {
+    readerBodyEl.style.setProperty('--reader-fs', readerFontSize + 'px');
+  }
+
+  function openReader(id) {
+    var n = nodesById[id];
+    if (!n) return;
+    state.selected = id;
+    readerTitleEl.textContent = n.title;
+    readerBodyEl.innerHTML = panelHtml(n);
+    var enlarge = readerBodyEl.querySelector('.btn-enlarge');
+    if (enlarge) enlarge.remove();
+    bindPanelActions(readerBodyEl, id, true);
+    readerOverlayEl.classList.remove('hidden');
+    applyReaderFont();
+    readerBodyEl.scrollTop = 0;
+  }
+
+  function closeReader() { readerOverlayEl.classList.add('hidden'); }
+
+  document.getElementById('reader-close').addEventListener('click', closeReader);
+  document.getElementById('reader-font-minus').addEventListener('click', function () {
+    readerFontSize = Math.max(12, readerFontSize - 1.5);
+    applyReaderFont();
+  });
+  document.getElementById('reader-font-plus').addEventListener('click', function () {
+    readerFontSize = Math.min(26, readerFontSize + 1.5);
+    applyReaderFont();
+  });
+  readerOverlayEl.addEventListener('click', function (e) { if (e.target === readerOverlayEl) closeReader(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeReader(); });
+
   function levelSection(node) {
     if (state.offline) {
       return '<div class="side-title">学习程度</div><div class="muted">离线只读模式，启动 <code>npm start</code> 并登录后可标注</div>';
@@ -331,64 +425,25 @@
       '<div class="level-row" data-node="' + esc(node.id) + '">' + btns + '</div>';
   }
 
-  function openPanel(id) {
-    var n = nodesById[id];
-    if (!n) return;
-    state.selected = id;
-
-    var rel = relatedOf(id).map(function (r) {
-      return '<button class="chip" data-id="' + esc(r.id) + '">' + esc(r.title) + '</button>';
-    }).join('') || '<span class="muted">（暂无，可在笔记 frontmatter 的 links 里声明）</span>';
-
-    var catColor = categoryColor(n.category);
-    var tags = (n.tags || []).map(function (t) {
-      return '<span class="chip tag">#' + esc(t) + '</span>';
-    }).join('');
-
-    panelEl.classList.remove('empty');
-    panelEl.innerHTML =
-      '<div class="panel-head">' +
-      '  <div class="panel-title">' + esc(n.title) + '</div>' +
-      '  <div class="panel-meta">' +
-      '    <span class="chip" style="background:' + catColor + '22;color:' + catColor + ';border:1px solid ' + catColor + '55">' + esc(n.category) + '</span>' +
-      '    <span class="chip ' + (n.status === 'todo' ? 'todo' : 'ok') + '">' + (n.status === 'todo' ? '待学习' : '已学习') + '</span>' +
-      tags +
-      '  </div>' +
-      '  <div class="panel-file">' + esc(n.file) + ' · 更新于 ' + esc(n.updatedAt || '-') + '</div>' +
-      '</div>' +
-      '<div class="panel-side panel-level">' + levelSection(n) + '</div>' +
-      '<div class="panel-body md">' + mdToHtml(n.content || '（暂无内容）') + '</div>' +
-      '<div class="panel-side">' +
-      '  <div class="side-title">关联知识点</div>' +
-      '  <div class="side-chips">' + rel + '</div>' +
-      '  <div class="side-title">参考资料</div>' +
-      '  <div class="side-sources">' + (sourceLinks(n) || '<span class="muted">（暂无）</span>') + '</div>' +
-      '</div>';
-
-    panelEl.querySelectorAll('button.chip[data-id]').forEach(function (b) {
-      b.addEventListener('click', function () { openPanel(b.dataset.id); });
-    });
-
-    panelEl.querySelectorAll('.lvl-btn').forEach(function (b) {
-      b.addEventListener('click', function () { setLevel(id, Number(b.dataset.level)); });
-    });
-
-    panelEl.scrollTop = 0;
-  }
-
   function setLevel(id, level) {
     if (!state.user) return;
     var prev = state.progress[id] ? state.progress[id].level : 0;
     // 乐观更新：先改界面，失败再回滚
     state.progress[id] = { level: level, updatedAt: new Date().toLocaleString('zh-CN') };
     refreshAll();
-    if (state.selected === id) openPanel(id);
+    if (state.selected === id) {
+      openPanel(id);
+      if (!readerOverlayEl.classList.contains('hidden')) openReader(id);
+    }
 
     api('PUT', '/progress', { nodeId: id, level: level }).then(function (r) {
       if (!r.ok) {
         state.progress[id] = { level: prev, updatedAt: undefined };
         refreshAll();
-        if (state.selected === id) openPanel(id);
+        if (state.selected === id) {
+          openPanel(id);
+          if (!readerOverlayEl.classList.contains('hidden')) openReader(id);
+        }
         alert('保存失败：' + ((r.data && r.data.error) || r.status));
       }
     }).catch(function () {

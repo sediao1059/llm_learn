@@ -21,17 +21,18 @@ npm start              # http://127.0.0.1:8080
 
 - 节点可拖拽，滚轮/双指缩放，空白处拖动平移；顶栏搜索按标题/标签过滤
 - 点击节点 → 右侧显示笔记正文（Markdown 渲染）、**学习程度**标注、关联知识点（可点击跳转）、参考资料
+- 右侧面板右上角 **⛶ 放大查看**：全屏阅读模式，支持 **A− / A＋ 字号调节**，Esc 或 ✕ 关闭
 - 学习程度四档：**未学习 / 了解 / 熟悉 / 掌握**；标注后：
   - 节点外圈颜色按程度着色（灰 → 蓝 → 绿 → 金）
   - 顶栏统计"已学 x/y（掌握度 %）"
   - 每个用户的进度相互独立，保存在 `data/app.db`（SQLite，已 gitignore）
-- 注册即自动登录；登录态（Bearer Token）存 localStorage，30 天有效，刷新自动恢复
+- 注册即自动登录；登录态（Bearer Token）存 localStorage，**永久有效**（仅退出登录时失效），刷新自动恢复
 
 ## API 一览（server.mjs）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | /api/auth/register | 注册（用户名 2–20 字符，密码 ≥ 6 位），返回 token |
+| POST | /api/auth/register | 注册（用户名 2–20 字符，密码 ≥ 4 位），返回 token |
 | POST | /api/auth/login | 登录，返回 token |
 | POST | /api/auth/logout | 退出（需 Bearer token） |
 | GET | /api/auth/me | 当前登录用户 |

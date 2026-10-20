@@ -42,11 +42,26 @@
       </div>
       <form id="auth-form">
         <label>用户名<input id="auth-username" autocomplete="username" maxlength="20" required></label>
-        <label>密码<input id="auth-password" type="password" autocomplete="current-password" minlength="6" maxlength="64" required></label>
+        <label>密码<input id="auth-password" type="password" autocomplete="current-password" minlength="4" maxlength="64" required></label>
         <div id="auth-error" class="auth-error hidden"></div>
         <button type="submit" id="auth-submit" class="btn primary">登录</button>
         <button type="button" id="auth-switch" class="btn link">没有账号？注册一个</button>
       </form>
+    </div>
+  </div>
+
+  <!-- 放大阅读视图（全屏查看笔记） -->
+  <div id="reader-overlay" class="reader-overlay hidden">
+    <div class="reader-card">
+      <div class="reader-head">
+        <span id="reader-node-title">笔记</span>
+        <div class="reader-tools">
+          <button id="reader-font-minus" class="btn small" title="缩小字号">A−</button>
+          <button id="reader-font-plus" class="btn small" title="放大字号">A＋</button>
+          <button id="reader-close" class="icon-btn" title="关闭（Esc）">✕</button>
+        </div>
+      </div>
+      <div id="reader-body"></div>
     </div>
   </div>
 

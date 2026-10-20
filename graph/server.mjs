@@ -25,7 +25,7 @@ const GRAPH_DIR = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(GRAPH_DIR, 'data');
 const DB_FILE = join(DATA_DIR, 'app.db');
 const PORT = Number(process.env.PORT || 8080);
-const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 天
+// 会话 token 永久有效（sessions.expires_at 存 0 表示永久），仅退出登录时失效
 
 /* ---------- 数据库 ---------- */
 mkdirSync(DATA_DIR, { recursive: true });
@@ -93,7 +93,7 @@ function verifyPassword(password, salt, expectedHash) {
 function createSession(userId) {
   const token = randomBytes(32).toString('hex');
   db.prepare('INSERT INTO sessions(token, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(token, userId, Date.now() + SESSION_TTL);
+    .run(token, userId, 0);
   return token;
 }
 
@@ -106,7 +106,7 @@ function currentUser(req) {
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
   `).get(m[1]);
-  if (!row || row.expires_at < Date.now()) return null;
+  if (!row || (row.expires_at > 0 && row.expires_at < Date.now())) return null;
   return row;
 }
 
@@ -126,7 +126,7 @@ async function handleApi(req, res, url) {
     const password = String(body.password || '');
     if (username.length < 2 || username.length > 20) return json(res, 400, { error: '用户名需 2–20 个字符' });
     if (!/^[\w\u4e00-\u9fa5.-]+$/.test(username)) return json(res, 400, { error: '用户名仅支持中英文、数字、._-' });
-    if (password.length < 6 || password.length > 64) return json(res, 400, { error: '密码需 6–64 个字符' });
+    if (password.length < 4 || password.length > 64) return json(res, 400, { error: '密码需 4–64 个字符' });
     const salt = randomBytes(16).toString('hex');
     try {
       const r = db.prepare('INSERT INTO users(username, password_hash, salt) VALUES (?, ?, ?)')
