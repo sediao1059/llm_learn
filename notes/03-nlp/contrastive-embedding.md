@@ -2,6 +2,7 @@
 id: contrastive-embedding
 title: 对比学习句向量（SimCSE → BGE）
 category: NLP 算法
+layer: L1-算法底层
 tags: [SimCSE, 对比学习, 句向量, BGE, Embedding]
 status: todo
 links: [word-embedding, bert-series, rag-vector-kb]

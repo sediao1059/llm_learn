@@ -2,6 +2,7 @@
 id: bert-series
 title: BERT 原理与文本分类
 category: NLP 算法
+layer: L1-算法底层
 tags: [BERT, Transformer, 文本分类, MLM, 微调]
 status: learned
 links: [word-embedding, llm-finetuning, hanlp-text-analysis]

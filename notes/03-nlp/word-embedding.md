@@ -2,6 +2,7 @@
 id: word-embedding
 title: 词向量（word2vec / GloVe / 腾讯词向量）
 category: NLP 算法
+layer: L1-算法底层
 tags: [词向量, word2vec, GloVe, 相似度召回, 嵌入]
 status: learned
 links: [bert-series, hanlp-text-analysis, rag-vector-kb]

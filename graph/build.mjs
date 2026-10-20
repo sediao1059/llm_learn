@@ -78,6 +78,7 @@ for (const file of files) {
     id,
     title: fm.title || stem,
     category: fm.category || '未分类',
+    layer: fm.layer || '未分层',
     status: fm.status === 'todo' ? 'todo' : 'learned',
     tags: Array.isArray(fm.tags) ? fm.tags : [],
     links: Array.isArray(fm.links) ? fm.links : [],
@@ -86,6 +87,7 @@ for (const file of files) {
     updatedAt: statSync(file).mtime.toISOString().slice(0, 10),
     content: parsed ? parsed.content : raw.trim()
   });
+  if (!fm.layer) warnings.push(`${rel}: 未标注 layer（归入"未分层"）`);
 }
 
 const edgeKeys = new Set();
@@ -101,7 +103,15 @@ for (const n of nodes) {
 }
 
 const categories = [...new Set(nodes.map(n => n.category))];
-const payload = { generatedAt: new Date().toISOString(), categories, nodes, edges };
+// 层列表：L 前缀字典序即 L1→L4，"未分层"（CJK）自然排最后
+const layers = [...new Set(nodes.map(n => n.layer))].sort((a, b) => a.localeCompare(b, 'en'));
+// 标签频次（供前端标签筛选条）
+const tagCount = {};
+for (const n of nodes) for (const t of n.tags) tagCount[t] = (tagCount[t] || 0) + 1;
+const allTags = Object.entries(tagCount)
+  .map(([tag, count]) => ({ tag, count }))
+  .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh'));
+const payload = { generatedAt: new Date().toISOString(), categories, layers, allTags, nodes, edges };
 
 mkdirSync(dirname(OUT_FILE), { recursive: true });
 const js =

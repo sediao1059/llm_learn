@@ -2,6 +2,7 @@
 id: agent-paradigms
 title: Agent 范式对比（ReAct / Plan-and-Execute / Reflexion）
 category: Agent 系统
+layer: L3-应用工程层
 tags: [ReAct, Plan-and-Execute, Reflexion, Agent范式]
 status: todo
 links: [manus-multi-step-execution, function-call, openai-agent-sdk]

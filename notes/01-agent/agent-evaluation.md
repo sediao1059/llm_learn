@@ -2,6 +2,7 @@
 id: agent-evaluation
 title: Agent 评测（GAIA / LLM-as-Judge / RAGAS）
 category: Agent 系统
+layer: L3-应用工程层
 tags: [评测, GAIA, LLM-as-Judge, 基准]
 status: todo
 links: [manus-multi-step-execution, genspark-search-agent, hallucination-mitigation]

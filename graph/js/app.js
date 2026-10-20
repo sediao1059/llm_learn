@@ -16,6 +16,15 @@
   ];
   var TOKEN_KEY = 'llm_learn_token';
 
+  // 技术层次（与领域分类正交的第二知识维度，见 docs/knowledge-dimensions-plan.md）
+  var LAYER_COLORS = {
+    'L1-算法底层': '#78d3f8',
+    'L2-大模型底层': '#7262fd',
+    'L3-应用工程层': '#61ddaa',
+    'L4-业务应用层': '#f6903d'
+  };
+  function layerColor(ly) { return LAYER_COLORS[ly] || '#8b93a7'; }
+
   // 会话状态
   var state = {
     token: null,
@@ -32,6 +41,13 @@
   var statsEl = document.getElementById('stats');
   var builtAtEl = document.getElementById('built-at');
   var authAreaEl = document.getElementById('auth-area');
+  var tagBarEl = document.getElementById('tag-bar');
+
+  // 视图模式（力导向 / 分层）与标签筛选状态，均持久化
+  var viewMode = 'force';
+  var selectedTags = [];
+  try { viewMode = localStorage.getItem('llm_view_mode') || 'force'; } catch (e) {}
+  try { selectedTags = JSON.parse(localStorage.getItem('llm_selected_tags') || '[]'); } catch (e) {}
 
   var nodesById = {};
   DATA.nodes.forEach(function (n) { nodesById[n.id] = n; });
@@ -189,20 +205,113 @@
 
   var chart = echarts.init(chartEl);
 
+  /* 匹配规则：文本搜索 AND 标签多选（OR 命中任一选中标签） */
   function matches(n, q) {
-    if (!q) return true;
-    var hay = [n.title, n.id, n.category, (n.tags || []).join(' ')].join(' ').toLowerCase();
-    return hay.indexOf(q) !== -1;
+    var ok = true;
+    if (q) {
+      var hay = [n.title, n.id, n.category, n.layer, (n.tags || []).join(' ')].join(' ').toLowerCase();
+      ok = hay.indexOf(q) !== -1;
+    }
+    if (ok && selectedTags.length) {
+      ok = (n.tags || []).some(function (t) { return selectedTags.indexOf(t) !== -1; });
+    }
+    return ok;
+  }
+
+  /* ---------- 标签筛选条（可多选、状态保留） ---------- */
+  var tagBarExpanded = false;
+  var TAG_TOP_N = 20;
+
+  function renderTagBar() {
+    var tags = DATA.allTags || [];
+    var showAll = tagBarExpanded || tags.length <= TAG_TOP_N + 5 || selectedTags.length;
+    var visible = showAll ? tags : tags.slice(0, TAG_TOP_N);
+    var html = visible.map(function (t) {
+      var on = selectedTags.indexOf(t.tag) !== -1;
+      return '<button class="tag-chip' + (on ? ' on' : '') + '" data-tag="' + esc(t.tag) + '">' +
+        esc(t.tag) + '<span class="cnt">' + t.count + '</span></button>';
+    }).join('');
+    if (!showAll && tags.length > visible.length) {
+      html += '<button class="tag-chip more">+' + (tags.length - visible.length) + ' 更多</button>';
+    }
+    if (selectedTags.length) {
+      html += '<button class="tag-chip clear">✕ 清除</button>';
+    }
+    tagBarEl.innerHTML = html;
+    tagBarEl.querySelectorAll('button.tag-chip[data-tag]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.dataset.tag;
+        var i = selectedTags.indexOf(t);
+        if (i === -1) selectedTags.push(t); else selectedTags.splice(i, 1);
+        try { localStorage.setItem('llm_selected_tags', JSON.stringify(selectedTags)); } catch (e) {}
+        renderTagBar();
+        refreshChart();
+      });
+    });
+    var moreBtn = tagBarEl.querySelector('button.tag-chip.more');
+    if (moreBtn) moreBtn.addEventListener('click', function () {
+      tagBarExpanded = true;
+      renderTagBar();
+    });
+    var clearBtn = tagBarEl.querySelector('button.tag-chip.clear');
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+      selectedTags = [];
+      try { localStorage.setItem('llm_selected_tags', '[]'); } catch (e) {}
+      renderTagBar();
+      refreshChart();
+    });
+  }
+
+  /* ---------- 分层布局：L1 在底 → L4 在顶，层内网格 ---------- */
+  var COL_W = 170, ROW_H = 100, LAYER_PAD = 150, MAX_COLS = 8;
+
+  function layerLayout() {
+    var layers = DATA.layers || [];
+    var byLayer = {};
+    DATA.nodes.forEach(function (n) {
+      (byLayer[n.layer] = byLayer[n.layer] || []).push(n);
+    });
+    var heights = layers.map(function (ly) {
+      var c = Math.max(1, (byLayer[ly] || []).length);
+      return Math.ceil(c / MAX_COLS) * ROW_H + LAYER_PAD;
+    });
+    var totalH = heights.reduce(function (a, b) { return a + b; }, 0);
+    var totalW = MAX_COLS * COL_W;
+    var pos = {};
+    var anchors = [];
+    // 从顶部往下分配：先遍历高层（L4），保证 L1 在最底部
+    var cy = -totalH / 2;
+    for (var li = layers.length - 1; li >= 0; li--) {
+      var ly = layers[li];
+      var ns = byLayer[ly] || [];
+      var rows = Math.max(1, Math.ceil(ns.length / MAX_COLS));
+      cy += heights[li] / 2;
+      var maxColsThis = 0;
+      ns.forEach(function (n, i) {
+        var r = Math.floor(i / MAX_COLS), c = i % MAX_COLS;
+        var inRow = Math.min(MAX_COLS, ns.length - r * MAX_COLS);
+        maxColsThis = Math.max(maxColsThis, inRow);
+        pos[n.id] = {
+          x: (c - (inRow - 1) / 2) * COL_W,
+          y: cy + (r - (rows - 1) / 2) * ROW_H
+        };
+      });
+      anchors.push({ layer: ly, x: -(maxColsThis * COL_W) / 2 - 140, y: cy });
+      cy += heights[li] / 2;
+    }
+    return { pos: pos, anchors: anchors, totalW: totalW, totalH: totalH };
   }
 
   function buildData(q) {
-    return DATA.nodes.map(function (n) {
+    var layered = viewMode === 'layer';
+    var layoutInfo = layered ? layerLayout() : null;
+    var arr = DATA.nodes.map(function (n) {
       var hit = matches(n, q);
       var isTodo = n.status === 'todo';
       var lv = levelOf(n.id);
       var lc = LEVELS[lv].color;
       var ringByLevel = lv > 0;
-      return {
+      var item = {
         id: n.id,
         name: n.title,
         category: Math.max(DATA.categories.indexOf(n.category), 0),
@@ -217,7 +326,29 @@
         },
         label: { show: hit, color: '#e8eaf0', fontSize: 13 }
       };
+      if (layered && layoutInfo.pos[n.id]) {
+        item.x = layoutInfo.pos[n.id].x;
+        item.y = layoutInfo.pos[n.id].y;
+        item.fixed = false;
+      }
+      return item;
     });
+    // 分层模式：每层左侧放一个隐形锚点节点，仅显示层名（跟随缩放平移）
+    if (layered) {
+      layoutInfo.anchors.forEach(function (a) {
+        var hit = !q || a.layer.toLowerCase().indexOf(q) !== -1;
+        arr.push({
+          id: '__layer__' + a.layer,
+          name: a.layer,
+          symbolSize: 1,
+          value: { __layerAnchor: true, title: a.layer, category: '', layer: a.layer, tags: [] },
+          itemStyle: { opacity: 0 },
+          label: { show: hit, color: layerColor(a.layer), fontSize: 14, fontWeight: 'bold', position: 'right' },
+          x: a.x, y: a.y
+        });
+      });
+    }
+    return arr;
   }
 
   function buildLinks(q) {
@@ -232,6 +363,15 @@
   }
 
   function chartOption() {
+    var layered = viewMode === 'layer';
+    var zoom = 1;
+    if (layered) {
+      var li = layerLayout();
+      // 自适应缩放但设下限，避免节点缩得太小（放不下时靠平移浏览）
+      zoom = Math.max(0.5, Math.min(1,
+        (chart.getHeight() - 160) / li.totalH,
+        (chart.getWidth() - 140) / li.totalW));
+    }
     return {
       backgroundColor: 'transparent',
       tooltip: {
@@ -239,10 +379,11 @@
         borderColor: '#262d3b',
         textStyle: { color: '#e8eaf0', fontSize: 13 },
         formatter: function (p) {
-          if (p.dataType !== 'node') return '';
+          if (p.dataType !== 'node' || p.data.value.__layerAnchor) return '';
           var n = p.data.value;
           var lv = LEVELS[levelOf(n.id)];
-          return '<b>' + esc(n.title) + '</b><br/>分类：' + esc(n.category) +
+          return '<b>' + esc(n.title) + '</b><br/>层次：' + esc(n.layer || '未分层') +
+            '<br/>分类：' + esc(n.category) +
             '<br/>笔记：' + (n.status === 'todo' ? '待学习' : '已学习') +
             '<br/><span style="color:' + lv.color + '">我的程度：' + lv.name + '</span>' +
             '<br/><span style="color:#8b93a7">点击查看笔记</span>';
@@ -256,7 +397,9 @@
       }],
       series: [{
         type: 'graph',
-        layout: 'force',
+        layout: layered ? 'none' : 'force',
+        zoom: zoom,
+        center: ['50%', '50%'],
         roam: true,
         draggable: true,
         categories: DATA.categories.map(function (name) { return { name: name }; }),
@@ -272,14 +415,37 @@
 
   chart.setOption(chartOption());
   chart.on('click', function (p) {
-    if (p.dataType === 'node') openPanel(p.data.value.id);
+    if (p.dataType === 'node' && p.data.value && !p.data.value.__layerAnchor) openPanel(p.data.value.id);
   });
-  window.addEventListener('resize', function () { chart.resize(); });
+  window.addEventListener('resize', function () {
+    chart.resize();
+    if (viewMode === 'layer') chart.setOption(chartOption(), { replaceMerge: ['series'] });
+  });
 
   searchEl.addEventListener('input', function () {
     state.query = searchEl.value.trim().toLowerCase();
-    chart.setOption({ series: [{ data: buildData(state.query), links: buildLinks(state.query) }] });
+    refreshChart();
   });
+
+  /* ---------- 视图模式切换 ---------- */
+  var modeForceBtn = document.getElementById('mode-force');
+  var modeLayerBtn = document.getElementById('mode-layer');
+
+  function renderModeButtons() {
+    modeForceBtn.classList.toggle('active', viewMode === 'force');
+    modeLayerBtn.classList.toggle('active', viewMode === 'layer');
+  }
+
+  function setViewMode(m) {
+    if (viewMode === m) return;
+    viewMode = m;
+    try { localStorage.setItem('llm_view_mode', m); } catch (e) {}
+    renderModeButtons();
+    chart.setOption(chartOption(), { replaceMerge: ['series'] });
+  }
+
+  modeForceBtn.addEventListener('click', function () { setViewMode('force'); });
+  modeLayerBtn.addEventListener('click', function () { setViewMode('layer'); });
 
   function refreshChart() {
     chart.setOption({ series: [{ data: buildData(state.query), links: buildLinks(state.query) }] });
@@ -318,6 +484,7 @@
     }).join('') || '<span class="muted">（暂无，可在笔记 frontmatter 的 links 里声明）</span>';
 
     var catColor = categoryColor(n.category);
+    var lyColor = layerColor(n.layer);
     var tags = (n.tags || []).map(function (t) {
       return '<span class="chip tag">#' + esc(t) + '</span>';
     }).join('');
@@ -328,6 +495,7 @@
       '    <button class="icon-btn btn-enlarge" title="放大查看">⛶</button>' +
       '  </div>' +
       '  <div class="panel-meta">' +
+      '    <span class="chip" style="background:' + lyColor + '22;color:' + lyColor + ';border:1px solid ' + lyColor + '55">' + esc(n.layer || '未分层') + '</span>' +
       '    <span class="chip" style="background:' + catColor + '22;color:' + catColor + ';border:1px solid ' + catColor + '55">' + esc(n.category) + '</span>' +
       '    <span class="chip ' + (n.status === 'todo' ? 'todo' : 'ok') + '">' + (n.status === 'todo' ? '待学习' : '已学习') + '</span>' +
       tags +
@@ -457,6 +625,8 @@
   /* ---------- 启动 ---------- */
   renderAuthArea();
   renderStats();
+  renderTagBar();
+  renderModeButtons();
 
   if (!state.offline) {
     state.token = localStorage.getItem(TOKEN_KEY);

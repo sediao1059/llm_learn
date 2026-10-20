@@ -2,6 +2,7 @@
 id: transformer-architecture
 title: Transformer 架构原理
 category: 深度学习基础
+layer: L1-算法底层
 tags: [Transformer, 注意力机制, 位置编码, 架构]
 status: learned
 links: [pytorch-basics, bert-series, transformer-implementation]

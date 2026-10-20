@@ -2,6 +2,7 @@
 id: transformer-implementation
 title: Transformer 手写实现（mini-GPT）
 category: 深度学习基础
+layer: L1-算法底层
 tags: [Transformer, PyTorch, 手写实现, GPT, 代码]
 status: learned
 links: [transformer-architecture, pytorch-basics, llm-finetuning]

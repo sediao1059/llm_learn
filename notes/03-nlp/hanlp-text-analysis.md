@@ -2,6 +2,7 @@
 id: hanlp-text-analysis
 title: HanLP 与中文语法语义分析（政策匹配链路）
 category: NLP 算法
+layer: L1-算法底层
 tags: [HanLP, 中文NLP, NER, 依存句法, 政策匹配]
 status: learned
 links: [word-embedding, bert-series]

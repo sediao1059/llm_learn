@@ -2,6 +2,7 @@
 id: llm-finetuning
 title: 大模型微调（LoRA / Prompt-Tuning）
 category: 大模型应用
+layer: L2-大模型底层
 tags: [微调, LoRA, PEFT, SFT, GLM]
 status: learned
 links: [pytorch-basics, bert-series, vllm-deployment]

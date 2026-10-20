@@ -2,6 +2,7 @@
 id: text2sql-chatbi
 title: 智能问数（Text2SQL / ChatBI）
 category: 大模型应用
+layer: L4-业务应用层
 tags: [Text2SQL, ChatBI, NL2SQL, 元数据, 数据分析]
 status: learned
 links: [rag-vector-kb, hallucination-mitigation]

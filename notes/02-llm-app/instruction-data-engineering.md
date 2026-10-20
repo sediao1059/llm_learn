@@ -2,6 +2,7 @@
 id: instruction-data-engineering
 title: 指令数据工程（合成 / 去重 / 质检）
 category: 大模型应用
+layer: L2-大模型底层
 tags: [数据工程, 指令微调, Self-Instruct, 数据质量]
 status: todo
 links: [llm-finetuning, prompt-engineering]

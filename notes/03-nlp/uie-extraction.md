@@ -2,6 +2,7 @@
 id: uie-extraction
 title: 信息抽取进阶（UIE / NER 微调 / 句法深入）
 category: NLP 算法
+layer: L1-算法底层
 tags: [UIE, 信息抽取, NER, 依存句法, 序列标注]
 status: todo
 links: [hanlp-text-analysis, bert-series, llm-finetuning]

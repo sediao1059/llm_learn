@@ -2,6 +2,7 @@
 id: manus-multi-step-execution
 title: Manus Agent 多步任务执行模式
 category: Agent 系统
+layer: L4-业务应用层
 tags: [Agent, Manus, Context-Engineering, 多步任务, 沙箱]
 status: learned
 links: [genspark-search-agent]

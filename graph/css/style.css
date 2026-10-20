@@ -185,6 +185,69 @@ footer code {
 #auth-area { display: flex; align-items: center; gap: 8px; }
 .offline-hint { font-size: 12px; border: 1px dashed var(--border); padding: 3px 10px; border-radius: 999px; }
 
+/* ---------- 筛选栏：视图模式 + 标签多选 ---------- */
+#filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  min-height: 40px;
+}
+
+.mode-switch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mode-btn {
+  padding: 4px 12px;
+  font-size: 12.5px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  cursor: pointer;
+}
+.mode-btn + .mode-btn { border-left: 1px solid var(--border); }
+.mode-btn.active { background: var(--accent); color: #fff; }
+
+#tag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  max-height: 58px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #1a2029;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.tag-chip:hover { color: var(--text); border-color: #4a5470; }
+.tag-chip.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
+  color: #cfe0ff;
+}
+.tag-chip .cnt { font-size: 10.5px; opacity: 0.7; }
+.tag-chip.clear { border-style: dashed; color: #e8684a; }
+.tag-chip.clear:hover { border-color: #e8684a; }
+
 /* ---------- 登录/注册弹窗 ---------- */
 .modal-mask {
   position: fixed;

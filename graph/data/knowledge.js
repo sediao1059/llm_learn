@@ -1,17 +1,634 @@
 // 本文件由 graph/build.mjs 自动生成，请勿手改；新增笔记后重新运行 npm run build。
 window.KNOWLEDGE_DATA = {
-  "generatedAt": "2026-10-20T07:28:08.011Z",
+  "generatedAt": "2026-10-20T07:36:49.029Z",
   "categories": [
     "Agent 系统",
     "大模型应用",
     "NLP 算法",
     "深度学习基础"
   ],
+  "layers": [
+    "L1-算法底层",
+    "L2-大模型底层",
+    "L3-应用工程层",
+    "L4-业务应用层"
+  ],
+  "allTags": [
+    {
+      "tag": "Agent",
+      "count": 5
+    },
+    {
+      "tag": "RAG",
+      "count": 4
+    },
+    {
+      "tag": "量化",
+      "count": 3
+    },
+    {
+      "tag": "Function-Call",
+      "count": 3
+    },
+    {
+      "tag": "Transformer",
+      "count": 3
+    },
+    {
+      "tag": "部署",
+      "count": 2
+    },
+    {
+      "tag": "评测",
+      "count": 2
+    },
+    {
+      "tag": "沙箱",
+      "count": 2
+    },
+    {
+      "tag": "推理优化",
+      "count": 2
+    },
+    {
+      "tag": "微调",
+      "count": 2
+    },
+    {
+      "tag": "依存句法",
+      "count": 2
+    },
+    {
+      "tag": "BGE",
+      "count": 2
+    },
+    {
+      "tag": "Embedding",
+      "count": 2
+    },
+    {
+      "tag": "KV-Cache",
+      "count": 2
+    },
+    {
+      "tag": "NER",
+      "count": 2
+    },
+    {
+      "tag": "PyTorch",
+      "count": 2
+    },
+    {
+      "tag": "安全",
+      "count": 1
+    },
+    {
+      "tag": "报告生成",
+      "count": 1
+    },
+    {
+      "tag": "边缘部署",
+      "count": 1
+    },
+    {
+      "tag": "编排",
+      "count": 1
+    },
+    {
+      "tag": "辩论",
+      "count": 1
+    },
+    {
+      "tag": "词向量",
+      "count": 1
+    },
+    {
+      "tag": "代码",
+      "count": 1
+    },
+    {
+      "tag": "低代码",
+      "count": 1
+    },
+    {
+      "tag": "对比学习",
+      "count": 1
+    },
+    {
+      "tag": "对齐",
+      "count": 1
+    },
+    {
+      "tag": "多步任务",
+      "count": 1
+    },
+    {
+      "tag": "多轮检索",
+      "count": 1
+    },
+    {
+      "tag": "多跳推理",
+      "count": 1
+    },
+    {
+      "tag": "分布式训练",
+      "count": 1
+    },
+    {
+      "tag": "隔离",
+      "count": 1
+    },
+    {
+      "tag": "个性化",
+      "count": 1
+    },
+    {
+      "tag": "工具协议",
+      "count": 1
+    },
+    {
+      "tag": "工作流编排",
+      "count": 1
+    },
+    {
+      "tag": "幻觉",
+      "count": 1
+    },
+    {
+      "tag": "幻觉抑制",
+      "count": 1
+    },
+    {
+      "tag": "基准",
+      "count": 1
+    },
+    {
+      "tag": "架构",
+      "count": 1
+    },
+    {
+      "tag": "检索优化",
+      "count": 1
+    },
+    {
+      "tag": "结构化输出",
+      "count": 1
+    },
+    {
+      "tag": "句向量",
+      "count": 1
+    },
+    {
+      "tag": "路由",
+      "count": 1
+    },
+    {
+      "tag": "偏好优化",
+      "count": 1
+    },
+    {
+      "tag": "嵌入",
+      "count": 1
+    },
+    {
+      "tag": "权限",
+      "count": 1
+    },
+    {
+      "tag": "深度研究",
+      "count": 1
+    },
+    {
+      "tag": "生态",
+      "count": 1
+    },
+    {
+      "tag": "手写实现",
+      "count": 1
+    },
+    {
+      "tag": "数据分析",
+      "count": 1
+    },
+    {
+      "tag": "数据工程",
+      "count": 1
+    },
+    {
+      "tag": "数据质量",
+      "count": 1
+    },
+    {
+      "tag": "搜索引擎",
+      "count": 1
+    },
+    {
+      "tag": "搜索Agent",
+      "count": 1
+    },
+    {
+      "tag": "提示词编译",
+      "count": 1
+    },
+    {
+      "tag": "提示词优化",
+      "count": 1
+    },
+    {
+      "tag": "提示注入",
+      "count": 1
+    },
+    {
+      "tag": "投机解码",
+      "count": 1
+    },
+    {
+      "tag": "推理加速",
+      "count": 1
+    },
+    {
+      "tag": "位置编码",
+      "count": 1
+    },
+    {
+      "tag": "文本分类",
+      "count": 1
+    },
+    {
+      "tag": "相似度召回",
+      "count": 1
+    },
+    {
+      "tag": "向量检索",
+      "count": 1
+    },
+    {
+      "tag": "校验",
+      "count": 1
+    },
+    {
+      "tag": "信息抽取",
+      "count": 1
+    },
+    {
+      "tag": "序列标注",
+      "count": 1
+    },
+    {
+      "tag": "训练循环",
+      "count": 1
+    },
+    {
+      "tag": "元数据",
+      "count": 1
+    },
+    {
+      "tag": "约束解码",
+      "count": 1
+    },
+    {
+      "tag": "长期记忆",
+      "count": 1
+    },
+    {
+      "tag": "长上下文",
+      "count": 1
+    },
+    {
+      "tag": "蒸馏",
+      "count": 1
+    },
+    {
+      "tag": "政策匹配",
+      "count": 1
+    },
+    {
+      "tag": "知识库",
+      "count": 1
+    },
+    {
+      "tag": "知识图谱",
+      "count": 1
+    },
+    {
+      "tag": "指令微调",
+      "count": 1
+    },
+    {
+      "tag": "智能体平台",
+      "count": 1
+    },
+    {
+      "tag": "中文NLP",
+      "count": 1
+    },
+    {
+      "tag": "注意力机制",
+      "count": 1
+    },
+    {
+      "tag": "自动提示词优化",
+      "count": 1
+    },
+    {
+      "tag": "Agent范式",
+      "count": 1
+    },
+    {
+      "tag": "Agent记忆",
+      "count": 1
+    },
+    {
+      "tag": "Agent平台",
+      "count": 1
+    },
+    {
+      "tag": "Airflow",
+      "count": 1
+    },
+    {
+      "tag": "APO",
+      "count": 1
+    },
+    {
+      "tag": "autograd",
+      "count": 1
+    },
+    {
+      "tag": "AWQ",
+      "count": 1
+    },
+    {
+      "tag": "BERT",
+      "count": 1
+    },
+    {
+      "tag": "ChatBI",
+      "count": 1
+    },
+    {
+      "tag": "ColBERT",
+      "count": 1
+    },
+    {
+      "tag": "Context-Engineering",
+      "count": 1
+    },
+    {
+      "tag": "CoT",
+      "count": 1
+    },
+    {
+      "tag": "DDP",
+      "count": 1
+    },
+    {
+      "tag": "Deep-Research",
+      "count": 1
+    },
+    {
+      "tag": "DeepSpeed",
+      "count": 1
+    },
+    {
+      "tag": "DistilBERT",
+      "count": 1
+    },
+    {
+      "tag": "DPO",
+      "count": 1
+    },
+    {
+      "tag": "DSPy",
+      "count": 1
+    },
+    {
+      "tag": "FSDP",
+      "count": 1
+    },
+    {
+      "tag": "GAIA",
+      "count": 1
+    },
+    {
+      "tag": "Genspark",
+      "count": 1
+    },
+    {
+      "tag": "GLM",
+      "count": 1
+    },
+    {
+      "tag": "GloVe",
+      "count": 1
+    },
+    {
+      "tag": "GPT",
+      "count": 1
+    },
+    {
+      "tag": "GPTQ",
+      "count": 1
+    },
+    {
+      "tag": "GraphRAG",
+      "count": 1
+    },
+    {
+      "tag": "GRPO",
+      "count": 1
+    },
+    {
+      "tag": "Handoff",
+      "count": 1
+    },
+    {
+      "tag": "HanLP",
+      "count": 1
+    },
+    {
+      "tag": "JSON",
+      "count": 1
+    },
+    {
+      "tag": "JSON-Schema",
+      "count": 1
+    },
+    {
+      "tag": "LangGraph",
+      "count": 1
+    },
+    {
+      "tag": "LLM",
+      "count": 1
+    },
+    {
+      "tag": "LLM-as-Judge",
+      "count": 1
+    },
+    {
+      "tag": "LoRA",
+      "count": 1
+    },
+    {
+      "tag": "Lost-in-the-Middle",
+      "count": 1
+    },
+    {
+      "tag": "Manus",
+      "count": 1
+    },
+    {
+      "tag": "MCP",
+      "count": 1
+    },
+    {
+      "tag": "Medusa",
+      "count": 1
+    },
+    {
+      "tag": "MemGPT",
+      "count": 1
+    },
+    {
+      "tag": "Milvus",
+      "count": 1
+    },
+    {
+      "tag": "Mixture-of-Agents",
+      "count": 1
+    },
+    {
+      "tag": "MLM",
+      "count": 1
+    },
+    {
+      "tag": "MoA",
+      "count": 1
+    },
+    {
+      "tag": "Multi-Agent",
+      "count": 1
+    },
+    {
+      "tag": "Neo4j",
+      "count": 1
+    },
+    {
+      "tag": "NL2SQL",
+      "count": 1
+    },
+    {
+      "tag": "nn.Module",
+      "count": 1
+    },
+    {
+      "tag": "OpenAI-Agent-SDK",
+      "count": 1
+    },
+    {
+      "tag": "PagedAttention",
+      "count": 1
+    },
+    {
+      "tag": "PEFT",
+      "count": 1
+    },
+    {
+      "tag": "Plan-and-Execute",
+      "count": 1
+    },
+    {
+      "tag": "Prompt",
+      "count": 1
+    },
+    {
+      "tag": "Prompt-Caching",
+      "count": 1
+    },
+    {
+      "tag": "Query改写",
+      "count": 1
+    },
+    {
+      "tag": "ReAct",
+      "count": 1
+    },
+    {
+      "tag": "Reflexion",
+      "count": 1
+    },
+    {
+      "tag": "Rerank",
+      "count": 1
+    },
+    {
+      "tag": "RLHF",
+      "count": 1
+    },
+    {
+      "tag": "Self-Instruct",
+      "count": 1
+    },
+    {
+      "tag": "Self-RAG",
+      "count": 1
+    },
+    {
+      "tag": "SFT",
+      "count": 1
+    },
+    {
+      "tag": "SimCSE",
+      "count": 1
+    },
+    {
+      "tag": "Skill",
+      "count": 1
+    },
+    {
+      "tag": "Super-Agent",
+      "count": 1
+    },
+    {
+      "tag": "Tensor",
+      "count": 1
+    },
+    {
+      "tag": "Text2SQL",
+      "count": 1
+    },
+    {
+      "tag": "TinyBERT",
+      "count": 1
+    },
+    {
+      "tag": "Tool-Use",
+      "count": 1
+    },
+    {
+      "tag": "UIE",
+      "count": 1
+    },
+    {
+      "tag": "vLLM",
+      "count": 1
+    },
+    {
+      "tag": "word2vec",
+      "count": 1
+    },
+    {
+      "tag": "ZeRO",
+      "count": 1
+    }
+  ],
   "nodes": [
     {
       "id": "agent-evaluation",
       "title": "Agent 评测（GAIA / LLM-as-Judge / RAGAS）",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "评测",
@@ -37,6 +654,7 @@ window.KNOWLEDGE_DATA = {
       "id": "agent-memory-personalization",
       "title": "Agent 记忆与个性化（千人千面）",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "Agent记忆",
@@ -61,6 +679,7 @@ window.KNOWLEDGE_DATA = {
       "id": "agent-paradigms",
       "title": "Agent 范式对比（ReAct / Plan-and-Execute / Reflexion）",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "ReAct",
@@ -86,6 +705,7 @@ window.KNOWLEDGE_DATA = {
       "id": "agent-sandbox-security",
       "title": "Agent 沙箱与安全",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "沙箱",
@@ -111,6 +731,7 @@ window.KNOWLEDGE_DATA = {
       "id": "agent-workflow-skill",
       "title": "工作流编排与 Skill 封装",
       "category": "Agent 系统",
+      "layer": "L4-业务应用层",
       "status": "learned",
       "tags": [
         "工作流编排",
@@ -135,6 +756,7 @@ window.KNOWLEDGE_DATA = {
       "id": "deep-research-products",
       "title": "Deep Research 产品架构",
       "category": "Agent 系统",
+      "layer": "L4-业务应用层",
       "status": "todo",
       "tags": [
         "Deep-Research",
@@ -159,6 +781,7 @@ window.KNOWLEDGE_DATA = {
       "id": "genspark-search-agent",
       "title": "Genspark 搜索 Agent 架构",
       "category": "Agent 系统",
+      "layer": "L4-业务应用层",
       "status": "learned",
       "tags": [
         "Agent",
@@ -185,6 +808,7 @@ window.KNOWLEDGE_DATA = {
       "id": "manus-multi-step-execution",
       "title": "Manus Agent 多步任务执行模式",
       "category": "Agent 系统",
+      "layer": "L4-业务应用层",
       "status": "learned",
       "tags": [
         "Agent",
@@ -213,6 +837,7 @@ window.KNOWLEDGE_DATA = {
       "id": "mcp-protocol",
       "title": "MCP（Model Context Protocol）",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "MCP",
@@ -236,6 +861,7 @@ window.KNOWLEDGE_DATA = {
       "id": "multi-agent-patterns",
       "title": "多 Agent 协作模式",
       "category": "Agent 系统",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "Multi-Agent",
@@ -263,6 +889,7 @@ window.KNOWLEDGE_DATA = {
       "id": "openai-agent-sdk",
       "title": "OpenAI Agent SDK 与智能体工作台",
       "category": "Agent 系统",
+      "layer": "L4-业务应用层",
       "status": "learned",
       "tags": [
         "Agent",
@@ -288,6 +915,7 @@ window.KNOWLEDGE_DATA = {
       "id": "agentic-rag",
       "title": "Agentic RAG",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "RAG",
@@ -313,6 +941,7 @@ window.KNOWLEDGE_DATA = {
       "id": "function-call",
       "title": "Function Call 与工具调用",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "Function-Call",
@@ -338,6 +967,7 @@ window.KNOWLEDGE_DATA = {
       "id": "graphrag",
       "title": "GraphRAG 与知识图谱增强检索",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "GraphRAG",
@@ -363,6 +993,7 @@ window.KNOWLEDGE_DATA = {
       "id": "hallucination-mitigation",
       "title": "大模型幻觉抑制",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "幻觉",
@@ -388,6 +1019,7 @@ window.KNOWLEDGE_DATA = {
       "id": "instruction-data-engineering",
       "title": "指令数据工程（合成 / 去重 / 质检）",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "数据工程",
@@ -412,6 +1044,7 @@ window.KNOWLEDGE_DATA = {
       "id": "kv-cache-long-context",
       "title": "KV Cache 原理与长上下文",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "KV-Cache",
@@ -436,6 +1069,7 @@ window.KNOWLEDGE_DATA = {
       "id": "llm-finetuning",
       "title": "大模型微调（LoRA / Prompt-Tuning）",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "learned",
       "tags": [
         "微调",
@@ -463,6 +1097,7 @@ window.KNOWLEDGE_DATA = {
       "id": "llm-quantization",
       "title": "推理量化（GPTQ / AWQ / FP8）",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "量化",
@@ -488,6 +1123,7 @@ window.KNOWLEDGE_DATA = {
       "id": "prompt-engineering",
       "title": "提示词工程",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "Prompt",
@@ -514,6 +1150,7 @@ window.KNOWLEDGE_DATA = {
       "id": "prompt-optimization-auto",
       "title": "提示词自动优化（DSPy / APO）",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "DSPy",
@@ -537,6 +1174,7 @@ window.KNOWLEDGE_DATA = {
       "id": "rag-vector-kb",
       "title": "RAG 与向量知识库",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "learned",
       "tags": [
         "RAG",
@@ -563,6 +1201,7 @@ window.KNOWLEDGE_DATA = {
       "id": "rerank-models",
       "title": "重排模型（Rerank）",
       "category": "大模型应用",
+      "layer": "L3-应用工程层",
       "status": "todo",
       "tags": [
         "Rerank",
@@ -587,6 +1226,7 @@ window.KNOWLEDGE_DATA = {
       "id": "rlhf-dpo",
       "title": "RLHF / DPO / GRPO 对齐训练",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "learned",
       "tags": [
         "RLHF",
@@ -612,6 +1252,7 @@ window.KNOWLEDGE_DATA = {
       "id": "speculative-decoding",
       "title": "投机解码（Speculative Decoding）",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "推理加速",
@@ -635,6 +1276,7 @@ window.KNOWLEDGE_DATA = {
       "id": "structured-output",
       "title": "结构化输出与约束解码",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "结构化输出",
@@ -659,6 +1301,7 @@ window.KNOWLEDGE_DATA = {
       "id": "text2sql-chatbi",
       "title": "智能问数（Text2SQL / ChatBI）",
       "category": "大模型应用",
+      "layer": "L4-业务应用层",
       "status": "learned",
       "tags": [
         "Text2SQL",
@@ -684,6 +1327,7 @@ window.KNOWLEDGE_DATA = {
       "id": "vllm-deployment",
       "title": "模型部署与推理服务（vLLM）",
       "category": "大模型应用",
+      "layer": "L2-大模型底层",
       "status": "learned",
       "tags": [
         "vLLM",
@@ -707,6 +1351,7 @@ window.KNOWLEDGE_DATA = {
       "id": "bert-series",
       "title": "BERT 原理与文本分类",
       "category": "NLP 算法",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "BERT",
@@ -733,6 +1378,7 @@ window.KNOWLEDGE_DATA = {
       "id": "contrastive-embedding",
       "title": "对比学习句向量（SimCSE → BGE）",
       "category": "NLP 算法",
+      "layer": "L1-算法底层",
       "status": "todo",
       "tags": [
         "SimCSE",
@@ -758,6 +1404,7 @@ window.KNOWLEDGE_DATA = {
       "id": "hanlp-text-analysis",
       "title": "HanLP 与中文语法语义分析（政策匹配链路）",
       "category": "NLP 算法",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "HanLP",
@@ -782,6 +1429,7 @@ window.KNOWLEDGE_DATA = {
       "id": "uie-extraction",
       "title": "信息抽取进阶（UIE / NER 微调 / 句法深入）",
       "category": "NLP 算法",
+      "layer": "L1-算法底层",
       "status": "todo",
       "tags": [
         "UIE",
@@ -807,6 +1455,7 @@ window.KNOWLEDGE_DATA = {
       "id": "word-embedding",
       "title": "词向量（word2vec / GloVe / 腾讯词向量）",
       "category": "NLP 算法",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "词向量",
@@ -833,6 +1482,7 @@ window.KNOWLEDGE_DATA = {
       "id": "distributed-training",
       "title": "分布式训练（DDP / DeepSpeed ZeRO）",
       "category": "深度学习基础",
+      "layer": "L2-大模型底层",
       "status": "todo",
       "tags": [
         "分布式训练",
@@ -859,6 +1509,7 @@ window.KNOWLEDGE_DATA = {
       "id": "model-compression",
       "title": "模型压缩（蒸馏 / INT8 量化）",
       "category": "深度学习基础",
+      "layer": "L1-算法底层",
       "status": "todo",
       "tags": [
         "蒸馏",
@@ -883,6 +1534,7 @@ window.KNOWLEDGE_DATA = {
       "id": "pytorch-basics",
       "title": "PyTorch 核心基础",
       "category": "深度学习基础",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "PyTorch",
@@ -908,6 +1560,7 @@ window.KNOWLEDGE_DATA = {
       "id": "transformer-architecture",
       "title": "Transformer 架构原理",
       "category": "深度学习基础",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "Transformer",
@@ -933,6 +1586,7 @@ window.KNOWLEDGE_DATA = {
       "id": "transformer-implementation",
       "title": "Transformer 手写实现（mini-GPT）",
       "category": "深度学习基础",
+      "layer": "L1-算法底层",
       "status": "learned",
       "tags": [
         "Transformer",

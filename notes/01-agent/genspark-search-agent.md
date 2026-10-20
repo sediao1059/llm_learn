@@ -2,6 +2,7 @@
 id: genspark-search-agent
 title: Genspark 搜索 Agent 架构
 category: Agent 系统
+layer: L4-业务应用层
 tags: [Agent, Genspark, 搜索引擎, Mixture-of-Agents, Super-Agent]
 status: learned
 links: [manus-multi-step-execution]

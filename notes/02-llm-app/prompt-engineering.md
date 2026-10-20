@@ -2,6 +2,7 @@
 id: prompt-engineering
 title: 提示词工程
 category: 大模型应用
+layer: L3-应用工程层
 tags: [Prompt, LLM, 提示词优化, CoT]
 status: learned
 links: [function-call, rag-vector-kb, hallucination-mitigation, agent-memory-personalization]

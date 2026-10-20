@@ -2,6 +2,7 @@
 id: graphrag
 title: GraphRAG 与知识图谱增强检索
 category: 大模型应用
+layer: L3-应用工程层
 tags: [GraphRAG, 知识图谱, RAG, 多跳推理, Neo4j]
 status: learned
 links: [rag-vector-kb, hanlp-text-analysis]

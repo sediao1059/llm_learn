@@ -2,6 +2,7 @@
 id: function-call
 title: Function Call 与工具调用
 category: 大模型应用
+layer: L3-应用工程层
 tags: [Function-Call, Tool-Use, Agent, JSON]
 status: learned
 links: [prompt-engineering, openai-agent-sdk, hallucination-mitigation]

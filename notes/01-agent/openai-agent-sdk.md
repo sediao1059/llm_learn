@@ -2,6 +2,7 @@
 id: openai-agent-sdk
 title: OpenAI Agent SDK 与智能体工作台
 category: Agent 系统
+layer: L4-业务应用层
 tags: [Agent, OpenAI-Agent-SDK, 智能体平台, Handoff]
 status: learned
 links: [manus-multi-step-execution, genspark-search-agent, function-call, agent-workflow-skill]
