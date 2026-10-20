@@ -5,6 +5,12 @@
 node_modules/
 npm-debug.log*
 
+# 本地数据库（学习进度/用户，不入库）
+graph/data/*.db
+graph/data/*.db-journal
+graph/data/*.db-shm
+graph/data/*.db-wal
+
 # 编辑器
 .idea/
 .vscode/

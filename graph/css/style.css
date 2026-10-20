@@ -160,6 +160,102 @@ footer code {
   border-radius: 4px;
 }
 
+/* ---------- 按钮 / 登录区 ---------- */
+.btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #1d2432;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.1); }
+.btn.small { padding: 5px 12px; font-size: 12.5px; }
+.btn.link { background: none; border: none; color: var(--muted); width: 100%; margin-top: 6px; }
+.btn.link:hover { color: var(--accent); }
+.btn:disabled { opacity: 0.6; cursor: wait; }
+
+.user-name { font-size: 13px; color: #c6d2f0; white-space: nowrap; }
+#auth-area { display: flex; align-items: center; gap: 8px; }
+.offline-hint { font-size: 12px; border: 1px dashed var(--border); padding: 3px 10px; border-radius: 999px; }
+
+/* ---------- 登录/注册弹窗 ---------- */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 12, 0.66);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-mask.hidden { display: none; }
+
+.modal {
+  width: 340px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.icon-btn:hover { color: var(--text); background: #1d2432; }
+
+#auth-form { display: flex; flex-direction: column; gap: 12px; }
+#auth-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+#auth-form input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0c0f15;
+  color: var(--text);
+  outline: none;
+  font-size: 14px;
+}
+#auth-form input:focus { border-color: var(--accent); }
+
+.auth-error {
+  color: #e8684a;
+  font-size: 12.5px;
+  background: #e8684a1a;
+  border: 1px solid #e8684a55;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.auth-error.hidden { display: none; }
+
+/* ---------- 学习程度 ---------- */
+.panel-level { margin: 0 0 14px; padding-bottom: 14px; border-bottom: 1px dashed var(--border); }
+.level-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.lvl-btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #1d2432;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lvl-btn:hover { color: var(--text); border-color: #4a5470; }
+.lvl-btn.active { font-weight: 700; background: #10141d; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   main { flex-direction: column; }

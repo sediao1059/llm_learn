@@ -12,6 +12,7 @@
     <div class="toolbar">
       <input id="search" type="search" placeholder="搜索知识点 / 标签…" autocomplete="off">
       <span id="stats" class="stats"></span>
+      <div id="auth-area"></div>
     </div>
   </header>
 
@@ -28,8 +29,26 @@
 
   <footer>
     数据由 <code>graph/build.mjs</code> 从 <code>notes/</code> 自动生成 ·
-    构建时间：<span id="built-at">-</span> · 新增笔记后请重新 <code>npm run build</code>
+    构建时间：<span id="built-at">-</span> ·
+    学习进度存于本地 SQLite（<code>npm start</code> 启动服务后登录可标注）
   </footer>
+
+  <!-- 登录 / 注册弹窗 -->
+  <div id="auth-modal" class="modal-mask hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <span id="auth-title">登录</span>
+        <button id="auth-close" class="icon-btn" title="关闭">✕</button>
+      </div>
+      <form id="auth-form">
+        <label>用户名<input id="auth-username" autocomplete="username" maxlength="20" required></label>
+        <label>密码<input id="auth-password" type="password" autocomplete="current-password" minlength="6" maxlength="64" required></label>
+        <div id="auth-error" class="auth-error hidden"></div>
+        <button type="submit" id="auth-submit" class="btn primary">登录</button>
+        <button type="button" id="auth-switch" class="btn link">没有账号？注册一个</button>
+      </form>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
