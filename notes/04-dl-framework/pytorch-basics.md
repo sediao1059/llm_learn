@@ -1,10 +1,10 @@
 ---
 id: pytorch-basics
 title: PyTorch 核心基础
-category: 深度学习框架
+category: 深度学习基础
 tags: [PyTorch, Tensor, autograd, 训练循环, nn.Module]
 status: learned
-links: [llm-finetuning, bert-series]
+links: [llm-finetuning, bert-series, transformer-architecture]
 sources:
   - [PyTorch 官方 Tutorials（60 Minute Blitz 起步）](https://pytorch.org/tutorials/)
   - [HuggingFace Transformers（基于 PyTorch 生态）](https://huggingface.co/docs/transformers)
