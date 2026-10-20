@@ -1,0 +1,11 @@
+{
+  "name": "llm-learn-knowledge-graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LLM 学习知识图谱：由 ../notes/ 目录的 markdown 笔记构建生成",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "python3 -m http.server 8080"
+  }
+}
