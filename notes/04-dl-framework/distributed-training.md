@@ -3,6 +3,8 @@ id: distributed-training
 title: 分布式训练（DDP / DeepSpeed ZeRO）
 category: 深度学习基础
 layer: L2-大模型底层
+path: 2.4
+difficulty: 深入
 tags: [分布式训练, DDP, ZeRO, DeepSpeed, FSDP]
 status: todo
 links: [pytorch-basics, llm-finetuning, transformer-implementation]

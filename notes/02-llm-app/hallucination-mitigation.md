@@ -3,6 +3,7 @@ id: hallucination-mitigation
 title: 大模型幻觉抑制
 category: 大模型应用
 layer: L3-应用工程层
+difficulty: 进阶
 tags: [幻觉, 幻觉抑制, 评测, RAG, 校验]
 status: learned
 links: [rag-vector-kb, function-call, text2sql-chatbi]

@@ -3,6 +3,8 @@ id: vllm-deployment
 title: 模型部署与推理服务（vLLM）
 category: 大模型应用
 layer: L2-大模型底层
+path: 4.2
+difficulty: 进阶
 tags: [vLLM, 推理优化, PagedAttention, 量化, 部署]
 status: learned
 links: [llm-finetuning]

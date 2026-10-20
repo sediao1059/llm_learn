@@ -3,6 +3,8 @@ id: multi-agent-patterns
 title: 多 Agent 协作模式
 category: Agent 系统
 layer: L3-应用工程层
+path: 5.2
+difficulty: 进阶
 tags: [Multi-Agent, 编排, 路由, 辩论, MoA, LangGraph]
 status: todo
 links: [openai-agent-sdk, genspark-search-agent, agent-workflow-skill]

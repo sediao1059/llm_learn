@@ -13,6 +13,7 @@ import { readFileSync, existsSync, statSync, mkdirSync } from 'node:fs';
 import { extname, join, dirname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { initAi, handleAiApi } from './ai.mjs';
 
 const sqlite = await import('node:sqlite').catch(() => null);
 if (!sqlite || !sqlite.DatabaseSync) {
@@ -51,6 +52,9 @@ db.exec(`
     PRIMARY KEY (user_id, node_id)
   );
 `);
+
+/* AI 能力表：模型配置 / 助手会话与消息 / 知识点沉淀（ai.mjs） */
+initAi(db);
 
 /* ---------- 工具 ---------- */
 function json(res, status, data) {
@@ -154,6 +158,11 @@ async function handleApi(req, res, url) {
   // 以下路由都需要登录
   const me = currentUser(req);
   if (!me) return json(res, 401, { error: '未登录或会话已过期' });
+
+  // AI 能力路由（模型管理 / 全局助手 / 知识点沉淀）
+  if (url.pathname.startsWith('/api/llm/') || url.pathname.startsWith('/api/ai/')) {
+    return handleAiApi({ req, res, url, me, json, readBody });
+  }
 
   if (route === 'GET /api/auth/me') {
     return json(res, 200, { username: me.username });

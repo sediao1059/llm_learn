@@ -3,6 +3,8 @@ id: llm-quantization
 title: 推理量化（GPTQ / AWQ / FP8）
 category: 大模型应用
 layer: L2-大模型底层
+path: 4.3
+difficulty: 深入
 tags: [量化, 推理优化, GPTQ, AWQ, 部署]
 status: todo
 links: [vllm-deployment, model-compression]

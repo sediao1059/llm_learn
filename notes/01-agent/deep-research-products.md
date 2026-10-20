@@ -3,6 +3,7 @@ id: deep-research-products
 title: Deep Research 产品架构
 category: Agent 系统
 layer: L4-业务应用层
+difficulty: 入门
 tags: [Deep-Research, 深度研究, 搜索Agent, 报告生成]
 status: todo
 links: [genspark-search-agent, rag-vector-kb, agent-paradigms]

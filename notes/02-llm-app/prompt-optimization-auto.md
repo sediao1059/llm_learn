@@ -3,6 +3,7 @@ id: prompt-optimization-auto
 title: 提示词自动优化（DSPy / APO）
 category: 大模型应用
 layer: L3-应用工程层
+difficulty: 深入
 tags: [DSPy, 自动提示词优化, 提示词编译, APO]
 status: todo
 links: [prompt-engineering]

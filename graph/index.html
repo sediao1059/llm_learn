@@ -12,15 +12,29 @@
     <div class="toolbar">
       <input id="search" type="search" placeholder="搜索知识点 / 标签…" autocomplete="off">
       <span id="stats" class="stats"></span>
+      <span id="assistant-entry" class="ai-entry"></span>
+      <span id="models-entry" class="ai-entry"></span>
       <div id="auth-area"></div>
     </div>
   </header>
 
   <div id="filter-bar">
-    <div class="mode-switch" title="图谱布局模式">
-      <button id="mode-force" class="mode-btn">力导向</button>
-      <button id="mode-layer" class="mode-btn">分层</button>
+    <div class="filter-row">
+      <div class="mode-switch" title="怎么看这张图：随便逛用力导向；看技术栈分层；新手按路线一步步学">
+        <button id="mode-force" class="mode-btn" title="所有知识点自由排布，连线 = 有关联，适合随便逛">力导向</button>
+        <button id="mode-layer" class="mode-btn" title="按技术栈从下往上摞：底下是地基（算法），中间是大模型本身，上面是搭应用的技术，顶上是产品方案">分层</button>
+        <button id="mode-route" class="mode-btn" title="像课程表一样按 1→2→3 排好学习顺序，最适合不知道从哪开始的新手">路线</button>
+      </div>
+      <div class="mode-switch" title="节点颜色代表什么（可切换）">
+        <button id="color-category" class="mode-btn" title="颜色 = 知识领域（Agent/大模型应用/NLP/深度学习）">按分类</button>
+        <button id="color-layer" class="mode-btn" title="颜色 = 技术栈层次（算法底层→业务应用）">按层次</button>
+        <button id="color-mastery" class="mode-btn" title="颜色 = 我自己的掌握程度（登录标注后生效，未学=灰）">按掌握度</button>
+      </div>
+      <div id="diff-bar" title="按难度筛选：新手建议先看入门+进阶，跳过深入"></div>
+      <span class="filter-spacer"></span>
+      <button id="btn-help" class="btn small" title="用大白话解释这张图怎么用">❓ 使用说明</button>
     </div>
+    <div id="route-bar" class="hidden"></div>
     <div id="tag-bar"></div>
   </div>
 
@@ -30,7 +44,7 @@
       <div class="empty-hint">
         <div class="empty-icon">👆</div>
         <p>点击左侧节点开始学习</p>
-        <p class="muted">节点可拖拽 · 滚轮缩放 · 顶部可搜索</p>
+        <p class="muted">不知道从哪学起？切到上方「路线」视图，从「① 打底线」开始</p>
       </div>
     </aside>
   </main>
@@ -73,9 +87,108 @@
     </div>
   </div>
 
+  <!-- AI 全局助手抽屉（登录后可用：共享会话 + 流式对话 + 沉淀知识点） -->
+  <div id="assistant-drawer" class="ai-drawer hidden">
+    <div class="ai-drawer-head">
+      <span class="ai-drawer-title">💬 全局助手</span>
+      <div class="ai-drawer-tools">
+        <select id="ai-model-select" title="对话使用的模型"></select>
+        <button id="ai-new-chat" class="btn small">＋ 新会话</button>
+        <button id="ai-toggle-sessions" class="icon-btn" title="显示/隐藏会话列表">☰</button>
+        <button id="ai-close" class="icon-btn" title="关闭">✕</button>
+      </div>
+    </div>
+    <div class="ai-drawer-body">
+      <aside id="ai-sessions" class="ai-sessions">
+        <div id="ai-session-list"></div>
+      </aside>
+      <section class="ai-chat">
+        <div id="ai-messages" class="ai-messages">
+          <div class="ai-empty-hint">
+            <div style="font-size:28px">💬</div>
+            <p>向 AI 助手提问，回答可一键沉淀为知识点</p>
+            <p class="muted">会话全员共享 · 上下文自动携带最近 20 条</p>
+          </div>
+        </div>
+        <div class="ai-input-row">
+          <textarea id="ai-input" rows="1" placeholder="向助手提问…（Enter 发送，Shift+Enter 换行）"></textarea>
+          <button id="ai-send" class="btn primary">发送</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 模型管理 -->
+  <div id="models-modal" class="modal-mask z-top hidden">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <span>⚙ LLM 模型管理</span>
+        <button id="models-close" class="icon-btn" title="关闭">✕</button>
+      </div>
+      <div id="models-body"></div>
+    </div>
+  </div>
+
+  <!-- 知识点沉淀预览 -->
+  <div id="know-modal" class="modal-mask z-top hidden">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <span>✨ 沉淀为知识点（AI 已与已有知识点对比）</span>
+        <button id="know-close" class="icon-btn" title="关闭">✕</button>
+      </div>
+      <div id="know-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- 使用说明（大白话版） -->
+  <div id="help-overlay" class="modal-mask z-top hidden">
+    <div class="modal modal-lg help-modal">
+      <div class="modal-head">
+        <span>❓ 这张图怎么用（大白话版）</span>
+        <button id="help-close" class="icon-btn" title="关闭">✕</button>
+      </div>
+      <div class="help-body">
+        <h3>这是什么？</h3>
+        <p>把你学的大模型知识做成一张可以点的「知识地图」：每个圆点是一个知识点，点一下右边就能看笔记。</p>
+
+        <h3>三种看图方式（左上角切换）</h3>
+        <ul>
+          <li><b>力导向</b>：所有知识点自由摆开，有线连着的代表「学了 A 再看 B 更容易懂」。适合随便逛。</li>
+          <li><b>分层</b>：按技术栈从下往上摞——最底下是算法地基，往上是训练和部署大模型的技术，再往上是搭应用的技术（RAG、Agent），最顶上是产品方案。适合看「我学的技术在哪个位置」。</li>
+          <li><b>路线</b>：像课程表一样按 1→2→3 排好顺序，<b>新手从这里开始</b>。先走「① 打底线」，再挑感兴趣的线。</li>
+        </ul>
+
+        <h3>节点颜色（可切换含义）</h3>
+        <ul>
+          <li><b>按分类</b>：颜色代表知识领域（Agent / 大模型应用 / NLP / 深度学习基础）。</li>
+          <li><b>按层次</b>：颜色代表技术栈的层（和分层视图对应）。</li>
+          <li><b>按掌握度</b>：颜色代表你自己学到什么程度（灰=没学，蓝=了解，绿=熟悉，金=掌握）。需要先登录标注。</li>
+        </ul>
+
+        <h3>新手 / 老手怎么用</h3>
+        <ul>
+          <li><b>新手</b>：切「路线」视图 → 选「① 打底线」→ 难度筛选只留「入门+进阶」→ 一步步学，学完一个在笔记里给自己标个程度。</li>
+          <li><b>老手</b>：用力导向或分层视图总览 → 用标签/难度筛选只看「深入」 → 查漏补缺。</li>
+        </ul>
+
+        <h3>其他小功能</h3>
+        <ul>
+          <li><b>学习程度</b>：登录后点开笔记，用「未学习/了解/熟悉/掌握」给自己打分，节点外圈会变色，顶栏显示总进度。</li>
+          <li><b>筛选</b>：标签和「入门/进阶/深入」都可以点多选，再点一下取消；和搜索框可以叠加。</li>
+          <li><b>放大阅读</b>：笔记右上角 ⛶ 全屏看，A−/A＋ 调字号。</li>
+          <li><b>AI 助手</b>：登录后右上角可以问问题，回答能一键存成新知识点（图上带 ✨ 标）。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="data/knowledge.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/assistant.js"></script>
 </body>
 </html>

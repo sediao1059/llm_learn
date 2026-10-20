@@ -14,6 +14,7 @@ const GRAPH_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(GRAPH_DIR, '..');
 const NOTES_DIR = join(ROOT, 'notes');
 const OUT_FILE = join(GRAPH_DIR, 'data', 'knowledge.js');
+const OUT_JSON = join(GRAPH_DIR, 'data', 'knowledge.json'); // 供 server.mjs（AI 知识点整合对比）读取
 
 function walk(dir) {
   let out = [];
@@ -62,6 +63,26 @@ const files = walk(NOTES_DIR).sort();
 const nodes = [];
 const seenIds = new Set();
 
+// 学习路线名称（path = 路线号.步骤号，见 docs/knowledge-dimensions-plan.md §5）
+const ROUTE_NAMES = {
+  '1': '① 打底线（新手从这里开始）',
+  '2': '② 训练线',
+  '3': '③ 应用线',
+  '4': '④ 推理部署线',
+  '5': '⑤ Agent 线'
+};
+
+/** 提取笔记正文第一句 blockquote 作为大白话摘要（笔记均以「> **一句话**：…」开头） */
+function extractSummary(content) {
+  const m = content.match(/^>\s*(.+)$/m);
+  if (!m) return '';
+  return m[1]
+    .replace(/\*\*一句话\*\*\s*[:：]\s*/, '')
+    .replace(/\*\*/g, '')
+    .trim()
+    .slice(0, 140);
+}
+
 for (const file of files) {
   const rel = relative(ROOT, file).split('\\').join('/');
   const raw = readFileSync(file, 'utf8');
@@ -74,17 +95,32 @@ for (const file of files) {
   if (seenIds.has(id)) { warnings.push(`${rel}: id "${id}" 与已有知识点重复，已跳过`); continue; }
   seenIds.add(id);
 
+  // path: '1.2' → 路线号 1、第 2 步；route 为可读的路线名+步骤
+  let pathNum = fm.path ? String(fm.path).trim() : '';
+  let route = '';
+  if (pathNum && /^\d+\.\d+$/.test(pathNum)) {
+    const [prefix, step] = pathNum.split('.');
+    route = (ROUTE_NAMES[prefix] || ('路线 ' + prefix)) + ' · 第 ' + Number(step) + ' 步';
+  } else if (pathNum) {
+    warnings.push(`${rel}: path "${pathNum}" 格式应为 路线号.步骤号（如 1.2）`);
+    pathNum = '';
+  }
+
   nodes.push({
     id,
     title: fm.title || stem,
     category: fm.category || '未分类',
     layer: fm.layer || '未分层',
+    path: pathNum,
+    route,
+    difficulty: fm.difficulty || '未标注',
     status: fm.status === 'todo' ? 'todo' : 'learned',
     tags: Array.isArray(fm.tags) ? fm.tags : [],
     links: Array.isArray(fm.links) ? fm.links : [],
     sources: Array.isArray(fm.sources) ? fm.sources : [],
     file: rel,
     updatedAt: statSync(file).mtime.toISOString().slice(0, 10),
+    summary: extractSummary(parsed ? parsed.content : ''),
     content: parsed ? parsed.content : raw.trim()
   });
   if (!fm.layer) warnings.push(`${rel}: 未标注 layer（归入"未分层"）`);
@@ -111,16 +147,34 @@ for (const n of nodes) for (const t of n.tags) tagCount[t] = (tagCount[t] || 0) 
 const allTags = Object.entries(tagCount)
   .map(([tag, count]) => ({ tag, count }))
   .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh'));
-const payload = { generatedAt: new Date().toISOString(), categories, layers, allTags, nodes, edges };
+
+// 学习路线：按路线号聚合、按步骤号排序（供路线视图）
+const routeMap = new Map();
+for (const n of nodes) {
+  if (!n.path) continue;
+  const prefix = n.path.split('.')[0];
+  if (!routeMap.has(prefix)) routeMap.set(prefix, []);
+  routeMap.get(prefix).push(n);
+}
+const routes = [...routeMap.entries()]
+  .sort((a, b) => Number(a[0]) - Number(b[0]))
+  .map(([id, ns]) => ({
+    id,
+    name: ROUTE_NAMES[id] || ('路线 ' + id),
+    steps: ns.sort((a, b) => Number(a.path.split('.')[1]) - Number(b.path.split('.')[1])).map(n => n.id)
+  }));
+
+const payload = { generatedAt: new Date().toISOString(), categories, layers, allTags, routes, nodes, edges };
 
 mkdirSync(dirname(OUT_FILE), { recursive: true });
 const js =
   '// 本文件由 graph/build.mjs 自动生成，请勿手改；新增笔记后重新运行 npm run build。\n' +
   'window.KNOWLEDGE_DATA = ' + JSON.stringify(payload, null, 2).replace(/<\//g, '<\\/') + ';\n';
 writeFileSync(OUT_FILE, js);
+writeFileSync(OUT_JSON, JSON.stringify(payload));
 
 console.log(`✔ 构建完成：${nodes.length} 个知识点，${edges.length} 条关联，${categories.length} 个分类`);
-console.log(`  输出：${relative(ROOT, OUT_FILE)}`);
+console.log(`  输出：${relative(ROOT, OUT_FILE)}、${relative(ROOT, OUT_JSON)}`);
 if (warnings.length) {
   console.log('\n构建告警：');
   warnings.forEach(w => console.log('  ⚠ ' + w));

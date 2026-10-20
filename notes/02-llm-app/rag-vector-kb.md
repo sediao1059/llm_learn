@@ -3,6 +3,8 @@ id: rag-vector-kb
 title: RAG 与向量知识库
 category: 大模型应用
 layer: L3-应用工程层
+path: 3.1
+difficulty: 入门
 tags: [RAG, 向量检索, Milvus, Embedding, 知识库]
 status: learned
 links: [prompt-engineering, text2sql-chatbi, hallucination-mitigation]

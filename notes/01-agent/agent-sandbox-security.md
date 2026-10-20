@@ -3,6 +3,8 @@ id: agent-sandbox-security
 title: Agent 沙箱与安全
 category: Agent 系统
 layer: L3-应用工程层
+path: 5.4
+difficulty: 进阶
 tags: [沙箱, 安全, 提示注入, 权限, 隔离]
 status: todo
 links: [manus-multi-step-execution, function-call]

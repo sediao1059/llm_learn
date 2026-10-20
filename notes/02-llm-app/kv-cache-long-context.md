@@ -3,6 +3,8 @@ id: kv-cache-long-context
 title: KV Cache 原理与长上下文
 category: 大模型应用
 layer: L2-大模型底层
+path: 4.1
+difficulty: 进阶
 tags: [KV-Cache, Prompt-Caching, 长上下文, Lost-in-the-Middle]
 status: todo
 links: [vllm-deployment, manus-multi-step-execution, prompt-engineering]

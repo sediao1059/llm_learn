@@ -3,6 +3,7 @@ id: structured-output
 title: 结构化输出与约束解码
 category: 大模型应用
 layer: L2-大模型底层
+difficulty: 进阶
 tags: [结构化输出, JSON-Schema, 约束解码, Function-Call]
 status: todo
 links: [function-call, prompt-engineering]

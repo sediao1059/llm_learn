@@ -3,6 +3,8 @@ id: rerank-models
 title: 重排模型（Rerank）
 category: 大模型应用
 layer: L3-应用工程层
+path: 3.3
+difficulty: 进阶
 tags: [Rerank, 检索优化, ColBERT, BGE]
 status: todo
 links: [rag-vector-kb, agentic-rag]

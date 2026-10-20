@@ -3,6 +3,7 @@ id: agent-workflow-skill
 title: 工作流编排与 Skill 封装
 category: Agent 系统
 layer: L4-业务应用层
+difficulty: 进阶
 tags: [工作流编排, 低代码, Skill, Airflow, Agent平台]
 status: learned
 links: [openai-agent-sdk, genspark-search-agent]

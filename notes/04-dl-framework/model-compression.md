@@ -3,6 +3,7 @@ id: model-compression
 title: 模型压缩（蒸馏 / INT8 量化）
 category: 深度学习基础
 layer: L1-算法底层
+difficulty: 进阶
 tags: [蒸馏, 量化, TinyBERT, DistilBERT, 边缘部署]
 status: todo
 links: [bert-series, vllm-deployment]

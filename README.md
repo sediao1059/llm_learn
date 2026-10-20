@@ -58,6 +58,45 @@ sources:                            # 参考资料（markdown 链接）
 - 点击节点 → 右侧面板显示笔记全文、所属层次与分类、学习程度标注、关联知识点（可继续点击跳转）与参考资料；右上角 ⛶ 可全屏放大阅读（A−/A＋ 字号）
 - `status: todo` 的节点在图上呈半透明虚线边框，代表「衍生学习」待办，学完后改状态并重新构建即可
 
+## AI 全局助手 · 模型管理 · 知识点沉淀（需启动服务并登录）
+
+基于 LLM 的三个联动功能（全部零依赖实现，移植自 bussiness-platform 的模型管理 + LlmClient 设计）：
+
+### 1. 模型管理（顶栏 ⚙ 模型）
+
+- 配置任意 openai 兼容（DeepSeek / GLM / Qwen / GPT…）或 anthropic（Claude）模型：名称 / 协议 / Base URL / API Key / 模型 ID / 最大输出 tokens / 启停
+- 行内可「测试连接」（真发一句话验证）、「设为全局默认」（全表互斥，首个启用的模型自动成为全局）
+- API Key 明文存本地 SQLite（`graph/data/app.db`，不入库），列表脱敏显示
+
+### 2. 全局助手（顶栏 💬 助手，右侧滑出抽屉）
+
+- 看图谱的同时随时向 AI 提问；回答流式打字机输出（SSE），思考过程折叠展示
+- **会话全员共享**：所有人可见所有提问记录（团队问答池），任何人都可续聊，上下文自动携带最近 20 条
+- 抽屉顶部可切换对话模型（默认全局模型，选择本地记忆）
+
+### 3. 知识点沉淀与自动整合（每条回答下「✨ 沉淀为知识点」）
+
+- 点击后服务端把**全部已有知识点摘要**（静态笔记 + 历史 AI 沉淀 + 历史 AI 补充）连同该问答交给 LLM 判断：
+  - **主题已有**（不同人问法/细节不同但重复）→ 合并进该知识点，只补充新信息
+  - **全新主题** → 新建知识点（自动归类、选层次 L1–L4、挑标签、建立与已有节点的关联）
+- 先弹预览（新建/合并徽标 + 理由 + 内容 + 关联，标题可改），**确认后**才写入
+- AI 新节点在图上带 ✨ 前缀与「AI 沉淀」徽标；合并内容以「✨ AI 补充」区块追加在对应笔记面板末尾；均支持学习程度标注与删除
+
+### 相关 API 一览（均需 Bearer 登录）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET/POST | `/api/llm/models`；PUT/DELETE `/api/llm/models/:id` | 模型增删改查（key 脱敏） |
+| PUT | `/api/llm/models/:id/global` · POST `/api/llm/models/:id/test` | 设全局默认 · 测连通 |
+| GET/POST | `/api/ai/chats`；PATCH/DELETE `/api/ai/chats/:id` | 共享会话管理 |
+| GET | `/api/ai/chats/:id/messages` | 会话消息 |
+| POST | `/api/ai/chats/:id/messages` | 发消息，**SSE 流式回复**（delta/thinking/result/error） |
+| GET | `/api/ai/knowledge` | AI 沉淀节点 + 补充 + 派生边 |
+| POST | `/api/ai/knowledge/preview` → `/api/ai/knowledge/apply` | 整合判断预览 → 确认写入 |
+| DELETE | `/api/ai/nodes/:id` · `/api/ai/merges/:id` | 删除 AI 节点 / AI 补充 |
+
+后端实现：`graph/llm.mjs`（双协议 SSE 流式 LLM 客户端）、`graph/ai.mjs`（全部 AI 路由与整合 prompt）。
+
 ## Git
 
 - 远程仓库：https://gitee.com/sediaoopen/llm_learn.git

@@ -3,6 +3,8 @@ id: mcp-protocol
 title: MCP（Model Context Protocol）
 category: Agent 系统
 layer: L3-应用工程层
+path: 5.3
+difficulty: 入门
 tags: [MCP, 工具协议, 生态, Function-Call]
 status: todo
 links: [function-call, openai-agent-sdk]

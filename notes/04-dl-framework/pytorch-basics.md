@@ -3,6 +3,8 @@ id: pytorch-basics
 title: PyTorch 核心基础
 category: 深度学习基础
 layer: L1-算法底层
+path: 1.1
+difficulty: 入门
 tags: [PyTorch, Tensor, autograd, 训练循环, nn.Module]
 status: learned
 links: [llm-finetuning, bert-series, transformer-architecture]

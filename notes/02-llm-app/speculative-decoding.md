@@ -3,6 +3,8 @@ id: speculative-decoding
 title: 投机解码（Speculative Decoding）
 category: 大模型应用
 layer: L2-大模型底层
+path: 4.4
+difficulty: 深入
 tags: [推理加速, 投机解码, Medusa, KV-Cache]
 status: todo
 links: [vllm-deployment, llm-quantization]

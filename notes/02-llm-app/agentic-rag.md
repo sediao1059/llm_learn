@@ -3,6 +3,8 @@ id: agentic-rag
 title: Agentic RAG
 category: 大模型应用
 layer: L3-应用工程层
+path: 3.4
+difficulty: 进阶
 tags: [RAG, Agent, 多轮检索, Self-RAG]
 status: todo
 links: [rag-vector-kb, agent-paradigms, rerank-models]

@@ -3,6 +3,7 @@ id: agent-memory-personalization
 title: Agent 记忆与个性化（千人千面）
 category: Agent 系统
 layer: L3-应用工程层
+difficulty: 进阶
 tags: [Agent记忆, 长期记忆, 个性化, Query改写, MemGPT]
 status: learned
 links: [prompt-engineering, manus-multi-step-execution]

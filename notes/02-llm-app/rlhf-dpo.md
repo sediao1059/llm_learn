@@ -3,6 +3,8 @@ id: rlhf-dpo
 title: RLHF / DPO / GRPO 对齐训练
 category: 大模型应用
 layer: L2-大模型底层
+path: 2.2
+difficulty: 深入
 tags: [RLHF, DPO, GRPO, 对齐, 偏好优化]
 status: learned
 links: [llm-finetuning, pytorch-basics]
