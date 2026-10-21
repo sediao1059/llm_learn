@@ -167,7 +167,10 @@ export async function bundleStats() {
 
 const CDN_DEPS = {
   echarts: 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js',
-  marked: 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js'
+  marked: 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js',
+  vue: 'https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js',
+  ep: 'https://cdn.jsdelivr.net/npm/element-plus@2.8.1/dist/index.full.min.js',
+  epLocale: 'https://cdn.jsdelivr.net/npm/element-plus@2.8.1/dist/locale/zh-cn.min.js'
 };
 
 /** 拉取 CDN 依赖并 gzip+base64（结果缓存；失败返回 null，离线包降级为保留 CDN 标签） */
@@ -189,7 +192,7 @@ async function loadDeps() {
   return out;
 }
 
-const APP_SCRIPTS = ['js/app.js', 'js/models.js', 'js/assistant.js', 'js/history.js', 'js/favorites.js', 'js/deposits.js', 'js/annotations.js'];
+const APP_SCRIPTS = ['js/app.js', 'js/models.js', 'js/assistant.js', 'js/annotations.js', 'js/ui-shell.js'];
 
 /** 生成自包含离线 HTML：内联 css + 本站 js（原文） + echarts/marked/知识数据（gzip+base64） */
 export async function getOfflineHtml() {

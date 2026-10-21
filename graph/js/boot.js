@@ -8,9 +8,12 @@
   var DB_NAME = 'llm-learn-cache', STORE = 'kv', KEY = 'knowledge-gz';
   var CDN = [
     'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js',
-    'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js'
+    'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js',
+    'https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js',
+    'https://cdn.jsdelivr.net/npm/element-plus@2.8.1/dist/index.full.min.js',
+    'https://cdn.jsdelivr.net/npm/element-plus@2.8.1/dist/locale/zh-cn.min.js'
   ];
-  var APP = ['js/app.js', 'js/models.js', 'js/assistant.js', 'js/history.js', 'js/favorites.js', 'js/deposits.js', 'js/annotations.js'];
+  var APP = ['js/app.js', 'js/models.js', 'js/assistant.js', 'js/annotations.js', 'js/ui-shell.js'];
   var hasDecompress = typeof DecompressionStream !== 'undefined';
 
   /* ---------- IndexedDB（不可用时静默降级为每次全量拉取） ---------- */

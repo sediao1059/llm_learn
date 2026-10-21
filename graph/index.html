@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM 学习知识图谱</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.8.1/dist/index.css">
 </head>
 <body>
   <header>
@@ -14,12 +15,6 @@
       <span id="stats" class="stats"></span>
       <span id="assistant-entry" class="ai-entry"></span>
       <span id="models-entry" class="ai-entry"></span>
-      <span id="history-entry" class="ai-entry"></span>
-      <span id="fav-entry" class="ai-entry"></span>
-      <span id="deposits-entry" class="ai-entry"></span>
-      <span id="upload-entry" class="ai-entry"></span>
-      <span id="paths-entry" class="ai-entry"></span>
-      <span id="admin-entry" class="ai-entry"></span>
       <div id="auth-area"></div>
     </div>
   </header>
@@ -64,31 +59,6 @@
     构建时间：<span id="built-at">-</span> ·
     学习进度存于数据库（<code>npm start</code> 启动服务后登录可标注）
   </footer>
-
-  <!-- 登录 / 注册弹窗 -->
-  <div id="auth-modal" class="modal-mask hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <span id="auth-title">登录</span>
-        <button id="auth-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <form id="auth-form">
-        <label>用户名<input id="auth-username" autocomplete="username" maxlength="20" required></label>
-        <label>密码<input id="auth-password" type="password" autocomplete="current-password" minlength="4" maxlength="64" required></label>
-        <label id="auth-invite-label" class="hidden">邀请码（向管理员索取）<input id="auth-invite" maxlength="32" placeholder="如：A1B2C3D4E5F6" autocomplete="off" title="注册需要管理员发的邀请码；系统还没有管理员时留空即可"></label>
-        <div id="auth-level-row" class="hidden">
-          <label>你的大模型经验（影响 AI 回答风格与路线推荐，之后在「⚙ 我的」里随时改）</label>
-          <div class="level-choice" title="选一个就好，随时能改">
-            <button type="button" class="level-opt active" data-level="novice" title="AI 会用大白话和生活化例子给你讲，术语都带翻译">🐣 新手</button>
-            <button type="button" class="level-opt" data-level="expert" title="AI 按工程师方式对话，直接给专业细节、参数和取舍">🦅 老手</button>
-          </div>
-        </div>
-        <div id="auth-error" class="auth-error hidden"></div>
-        <button type="submit" id="auth-submit" class="btn primary">登录</button>
-        <button type="button" id="auth-switch" class="btn link">没有账号？注册一个</button>
-      </form>
-    </div>
-  </div>
 
   <!-- 放大阅读视图（全屏查看笔记） -->
   <div id="reader-overlay" class="reader-overlay hidden">
@@ -158,39 +128,6 @@
     </div>
   </div>
 
-  <!-- 沉淀中心（我的提交进度） -->
-  <div id="deposits-modal" class="modal-mask z-top hidden">
-    <div class="modal modal-lg">
-      <div class="modal-head">
-        <span>📥 沉淀中心</span>
-        <button id="deposits-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <div id="deposits-body" class="deposits-body"></div>
-    </div>
-  </div>
-
-  <!-- ⭐ 收藏中心（仅自己可见） -->
-  <div id="fav-modal" class="modal-mask z-top hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <span>⭐ 我的收藏</span>
-        <button id="fav-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <div id="fav-body" class="history-body"></div>
-    </div>
-  </div>
-
-  <!-- 浏览足迹（仅自己可见） -->
-  <div id="history-modal" class="modal-mask z-top hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <span>🕘 我的浏览足迹</span>
-        <button id="history-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <div id="history-body" class="history-body"></div>
-    </div>
-  </div>
-
   <!-- 划词注释（选中正文 → 浮窗解答 → 存为带下划线的注释） -->
   <div id="anno-modal" class="modal-mask z-top hidden">
     <div class="modal modal-lg">
@@ -202,72 +139,10 @@
     </div>
   </div>
 
-  <!-- 个人中心：用户画像配置（新手/老手 + 方向偏好） -->
-  <div id="profile-modal" class="modal-mask z-top hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <span>⚙ 我的 · 用户画像</span>
-        <button id="profile-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <div id="profile-body"></div>
-    </div>
-  </div>
-
   <div id="toast" class="toast hidden"></div>
 
-  <!-- 使用说明（大白话版） -->
-  <div id="help-overlay" class="modal-mask z-top hidden">
-    <div class="modal modal-lg help-modal">
-      <div class="modal-head">
-        <span>❓ 这张图怎么用（大白话版）</span>
-        <button id="help-close" class="icon-btn" title="关闭">✕</button>
-      </div>
-      <div class="help-body">
-        <h3>这是什么？</h3>
-        <p>把你学的大模型知识做成一张可以点的「知识地图」：每个圆点是一个知识点，点一下右边就能看笔记。</p>
-
-        <h3>四种看图方式（左上角切换）</h3>
-        <ul>
-          <li><b>大纲</b>（默认推荐）：先只看几个最重要的「大节点」，点一下展开下一层并看笔记，再点一下收起；层与层之间不连线，知识点再多也不乱。你展开到哪一层，刷新后还记得。右上角「一键收起」可回到只看第一层。</li>
-          <li><b>力导向</b>：所有知识点自由摆开，有线连着的代表「学了 A 再看 B 更容易懂」。适合随便逛。</li>
-          <li><b>分层</b>：按技术栈从下往上摞——最底下是算法地基，往上是训练和部署大模型的技术，再往上是搭应用的技术（RAG、Agent），最顶上是产品方案。适合看「我学的技术在哪个位置」。</li>
-          <li><b>路线</b>：像课程表一样按 1→2→3 排好顺序，<b>新手从这里开始</b>。先走「① 打底线」，再挑感兴趣的线。</li>
-        </ul>
-
-        <h3>节点颜色（可切换含义）</h3>
-        <ul>
-          <li><b>按分类</b>：颜色代表知识领域（Agent / 大模型应用 / NLP / 深度学习基础）。</li>
-          <li><b>按层次</b>：颜色代表技术栈的层（和分层视图对应）。</li>
-          <li><b>按掌握度</b>：颜色代表你自己学到什么程度（灰=没学，蓝=了解，绿=熟悉，金=掌握）。需要先登录标注。</li>
-        </ul>
-
-        <h3>新手 / 老手怎么用</h3>
-        <ul>
-          <li><b>新手</b>：默认的「大纲」视图从第一层入口一个个点开看；也可以切「路线」视图选「① 打底线」，难度筛选只留「入门+进阶」，一步步学，学完一个在笔记里给自己标个程度。</li>
-          <li><b>老手</b>：用力导向或分层视图总览 → 用标签/难度筛选只看「深入」 → 查漏补缺。</li>
-        </ul>
-
-        <h3>其他小功能</h3>
-        <ul>
-          <li><b>学习程度</b>：登录后点开笔记，用「未学习/了解/熟悉/掌握」给自己打分，节点外圈会变色，顶栏显示总进度。</li>
-          <li><b>筛选</b>：标签和「入门/进阶/深入」都可以点多选，再点一下取消；和搜索框可以叠加。</li>
-          <li><b>放大阅读</b>：笔记右上角 ⛶ 全屏看，A−/A＋ 调字号。</li>
-          <li><b>浏览足迹</b>：登录后顶栏「🕘 足迹」能看你最近看过哪些知识点（只有你自己可见），点一下就能回去接着看。</li>
-          <li><b>收藏与个人笔记</b>：打开笔记点右上角 ☆ 收藏（顶栏「⭐ 收藏」随时找回）；「📝 我的笔记」可以给每篇写只给自己看的备注，跟着账号走、换设备也在。</li>
-          <li><b>🔥 大家都在看</b>：筛选栏下这条是全站最近 30 天的热门——单人同一篇只算一次、超过 10 次才上榜，每晚自动更新；点标签等于筛选，点标题直接打开笔记。</li>
-          <li><b>AI 助手</b>：登录后右上角可以问问题，回答能一键存成新知识点（图上带 ✨ 标）。</li>
-          <li><b>知识沉淀要审核</b>：普通用户点「✨ 沉淀为知识点」会先填一个小表单（几颗星的重要程度 + 备注）交给管理员审，通过后才进图谱；自己提交的进度在「📥 沉淀中心」看。管理员的沉淀免审直接进。</li>
-          <li><b>审核标识</b>：AI 沉淀的知识点右上角有小标签——「⏳ 待审核」或「✅ 已审核·N」，鼠标放上去能看到是哪几位管理员审的。</li>
-          <li><b>AI 学习路线</b>：顶栏「🗺 学习路线」开一个新页面——带 <b>⭐ 官方</b> 标的路线置顶，<b>点开直接就能学</b>（新手建议先选官方入门线）；也可以和 AI 聊你的目标让它定制一条，继续提要求让它改，满意了保存下来随时看。</li>
-          <li><b>离线包</b>：顶栏「⬇ 离线包」下载一个单文件网页（带全部知识点），拷到没网的电脑上双击就能看。平时打开页面用的也是压缩传输 + 本地缓存，省流量也快。</li>
-          <li><b>划词注释</b>：读笔记时选中一段文字，旁边会弹「💡 解答」，AI 解释后可以存成<b>注释</b>——原文会被画上下划线，别人点下划线就能看你的解读（实线=已审核大家可见；虚线=你自己的待审核）。也支持对整篇笔记加注释（见正文底部「💬 本篇注释」）。</li>
-          <li><b>高频面试题</b>：部分笔记正文里有一个蓝色的「💼 高频面试题」标签，点一下就展开这篇的面试题与参考答案，适合复习；没生成的篇目管理员可以在「🛡 管理 → 面试题」里一键用 AI 补全。</li>
-          <li><b>上传知识</b>：顶栏「📤 上传知识」开一个专门页面——发一个文章<b>链接</b>（AI 自动抓正文）或粘贴<b>大段文本</b>，AI 拆解成知识点（自动生成检索标签、找关联、建议归入哪个专栏），管理员审核后进图谱；相似的会合并成「📚 专栏」节点，点开看多篇成员文章。每次入库都会累计<b>贡献分</b>（页面上有 90 天热力日历，排行榜即将上线）。</li>
-          <li><b>用户画像（新手/老手）</b>：注册时选一次，之后在顶栏「⚙ 我的」里随时改——<b>新手</b>：AI 助手用大白话和生活化例子回答、学习路线从打地基排起；<b>老手</b>：AI 直接给专业细节和参数、路线跳过入门直击进阶。还能多选方向偏好（RAG / Agent / 训练 / 推理），路线会优先深入你选的方向。你沉淀的知识会带上当时的画像标签。</li>
-        </ul>
-      </div>
-    </div>
-  </div>
+  <!-- Vue UI Shell：承载登录/注册、个人中心、足迹、收藏、沉淀中心、使用说明、程度/笔记悬浮操作 -->
+  <div id="ui-shell"></div>
 
   <!-- 知识数据引导：拉取 gzip bundle（IndexedDB 缓存秒开）后按序加载其余脚本 -->
   <script src="js/boot.js"></script>

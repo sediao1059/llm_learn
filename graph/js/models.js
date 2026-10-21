@@ -40,12 +40,13 @@
 
   function render(models) {
     var rows = models.map(function (m) {
+      // 斜杠后加 <wbr>：URL 放不下时优先在路径边界折行，而不是任意字符断开
+      var url = esc(m.baseUrl).replace(/\//g, '/<wbr>');
       return '<tr>' +
         '<td><b>' + esc(m.name) + '</b>' + (m.isGlobal ? ' <span class="chip ok">全局默认</span>' : '') + '</td>' +
         '<td>' + esc(m.protocol) + '</td>' +
-        '<td class="mono">' + esc(m.baseUrl) + '</td>' +
-        '<td class="mono">' + esc(m.modelId) + '</td>' +
-        '<td>' + esc(m.maxTokens || 8192) + '</td>' +
+        '<td class="mono">' + url + '</td>' +
+        '<td class="mono">' + esc(m.modelId) + '<br><span class="cell-sub">单次输出 ≤ ' + esc(m.maxTokens || 8192) + ' tokens</span></td>' +
         '<td class="mono">' + esc(m.apiKeyMasked) + '</td>' +
         '<td>' + (m.status === 'enabled' ? '<span class="chip ok">启用</span>' : '<span class="chip todo">停用</span>') + '</td>' +
         '<td><div class="tbl-ops">' +
@@ -60,11 +61,11 @@
     bodyEl.innerHTML =
       '<div class="tbl-bar">' +
       '  <button class="btn small primary" id="models-add">＋ 新建模型</button>' +
-      '  <span class="muted">API Key 仅存本地 SQLite（明文），列表脱敏显示；首个启用的模型自动成为全局默认</span>' +
+      '  <span class="muted">API Key 明文存 MySQL，列表脱敏显示；首个启用的模型自动成为全局默认</span>' +
       '</div>' +
-      '<table class="tbl"><thead><tr><th>名称</th><th>协议</th><th>Base URL</th><th>模型 ID</th><th>输出上限</th><th>API Key</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="8" class="muted" style="text-align:center;padding:22px">还没有配置模型，点「新建模型」添加一个（如 DeepSeek / GLM / Claude）</td></tr>') +
-      '</tbody></table>' +
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>名称</th><th>协议</th><th>Base URL</th><th>模型 ID</th><th>API Key</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">还没有配置模型，点「新建模型」添加一个（如 DeepSeek / GLM / Claude）</td></tr>') +
+      '</tbody></table></div>' +
       '<div id="models-form-wrap"></div>' +
       '<div id="models-test-out" class="muted" style="margin-top:10px"></div>';
 

@@ -23,25 +23,35 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
 }
 
-/* ---------- 顶栏 ---------- */
+/* ---------- 顶栏（标题固定左侧一行，菜单占右侧、放不下时在自身内部折行） ---------- */
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   padding: 10px 18px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
   box-shadow: 0 1px 4px rgba(18, 18, 18, 0.04);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
-header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+header h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 
-.toolbar { display: flex; align-items: center; gap: 12px; }
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
+}
 
 #search {
-  width: 260px;
+  width: 190px;
+  flex: 0 1 190px;
+  min-width: 110px;
   padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -53,7 +63,18 @@ header h1 { font-size: 17px; margin: 0; font-weight: 600; }
 }
 #search:focus { border-color: var(--accent); background: #fff; }
 
-.stats { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.stats {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  max-width: 190px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 顶栏按钮比正文里的略紧一点，登录后十余个入口才能与标题同处一行 */
+.toolbar .btn.small { padding: 4px 10px; }
 
 /* ---------- 图谱节点 hover 浮窗 ---------- */
 /* 限宽（约页面一半）并强制折行，避免浮窗和文字把页面撑出横向滚动 */
@@ -195,8 +216,15 @@ footer code {
 .btn.link:hover { color: var(--accent); }
 .btn:disabled { opacity: 0.6; cursor: wait; }
 
-.user-name { font-size: 13px; color: #444444; white-space: nowrap; }
-#auth-area { display: flex; align-items: center; gap: 8px; }
+.user-name {
+  font-size: 13px;
+  color: #444444;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#auth-area { display: flex; align-items: center; gap: 6px; }
 .offline-hint { font-size: 12px; border: 1px dashed var(--border); padding: 3px 10px; border-radius: 999px; }
 
 /* ---------- 筛选栏：视图模式 + 标签多选 ---------- */
@@ -443,6 +471,8 @@ footer code {
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
+  header { flex-wrap: wrap; }
+  .toolbar { justify-content: flex-start; }
   main { flex-direction: column; }
   #graph { height: 48vh; }
   #panel { width: 100%; max-width: none; flex: 1; border-left: none; border-top: 1px solid var(--border); }
@@ -611,12 +641,24 @@ footer code {
 /* ---------- 模型管理 / 沉淀预览弹窗 ---------- */
 .modal-lg { width: min(880px, 94vw); max-height: 88vh; overflow-y: auto; }
 .modal-mask.z-top { z-index: 300; }
+#models-modal .modal-lg { width: min(1040px, 94vw); } /* 模型表 8 列，加宽避免互相挤压 */
 
 .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tbl th, .tbl td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; }
-.tbl th { background: var(--bg-soft); position: sticky; top: 0; z-index: 1; }
-.tbl .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+.tbl th { background: var(--bg-soft); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+/* 技术字符串（URL / 模型 ID）先在词边界折行（斜杠、连字符处），确实放不下才按字符断开 */
+.tbl .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; word-break: normal; overflow-wrap: anywhere; }
 .tbl-ops { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* 模型表：窄窗口时表格横向滚动，不把列挤成竖排碎行 */
+.tbl-wrap { overflow-x: auto; }
+#models-body .tbl { min-width: 820px; }
+#models-body .tbl td { vertical-align: middle; }
+#models-body .tbl th:nth-child(5) { width: 158px; } /* API Key 列：常见长度脱敏 key 单行放下 */
+#models-body .tbl-ops { flex-wrap: nowrap; }
+#models-body .tbl-ops .btn { white-space: nowrap; flex-shrink: 0; }
+#models-body .tbl-bar .muted { flex: 1; min-width: 220px; text-align: right; }
+.cell-sub { font-size: 11px; color: var(--muted); }
 
 .btn.tiny { padding: 3px 9px; font-size: 11.5px; border-radius: 6px; }
 .btn.danger { color: var(--danger); border-color: #d6455d44; }

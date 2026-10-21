@@ -309,122 +309,28 @@
     } else if (state.user) {
       authAreaEl.innerHTML =
         '<span class="user-name" title="当前登录用户' + (state.role === 'admin' ? '（管理员）' : '') + '">' +
-          '👤 ' + esc(state.user) + (state.role === 'admin' ? ' <span class="chip ok">🛡 管理员</span>' : '') + '</span>' +
+          '👤 ' + esc(state.user) + '</span>' +
         '<button id="btn-profile" class="btn small" title="配置我的画像：新手/老手决定 AI 用大白话还是专业细节回答，方向偏好多选">⚙ 我的</button>' +
         '<button id="btn-logout" class="btn small">退出</button>';
       authAreaEl.querySelector('#btn-logout').addEventListener('click', logout);
-      authAreaEl.querySelector('#btn-profile').addEventListener('click', openProfileModal);
+      authAreaEl.querySelector('#btn-profile').addEventListener('click', function () { window.dispatchEvent(new CustomEvent('kg:ui', { detail: { dialog: 'profile' } })); });
     } else {
       authAreaEl.innerHTML =
         '<button id="btn-login" class="btn small">登录</button>' +
         '<button id="btn-register" class="btn small primary">注册</button>';
-      authAreaEl.querySelector('#btn-login').addEventListener('click', function () { openAuthModal('login'); });
-      authAreaEl.querySelector('#btn-register').addEventListener('click', function () { openAuthModal('register'); });
+      authAreaEl.querySelector('#btn-login').addEventListener('click', function () { window.dispatchEvent(new CustomEvent('kg:ui', { detail: { dialog: 'auth', mode: 'login' } })); });
+      authAreaEl.querySelector('#btn-register').addEventListener('click', function () { window.dispatchEvent(new CustomEvent('kg:ui', { detail: { dialog: 'auth', mode: 'register' } })); });
     }
     // 广播登录状态变化（assistant.js / models.js / history.js 据此显隐入口按钮）
     window.dispatchEvent(new CustomEvent('kg:user', { detail: { user: state.user, role: state.role, profileTags: state.profileTags, offline: state.offline } }));
   }
 
   /* ---------- 个人中心：用户画像配置 ---------- */
-  var profileModalEl = document.getElementById('profile-modal');
-  var profileBodyEl = document.getElementById('profile-body');
 
-  function openProfileModal() {
-    var tags = state.profileTags || { level: 'novice', focus: [] };
-    profileBodyEl.innerHTML =
-      '<div class="profile-user-line">' +
-        '<b>' + esc(state.user || '') + '</b>' +
-        (state.role === 'admin' ? ' <span class="chip ok">🛡 管理员</span>' : ' <span class="chip">普通用户</span>') +
-      '</div>' +
-      '<div id="pf-contrib" class="pf-contrib muted" style="margin-bottom:12px">贡献加载中…</div>' +
-      '<div class="sub-label">大模型经验（影响 AI 回答风格与学习路线推荐）</div>' +
-      '<div class="level-choice" id="pf-level">' +
-      '  <button type="button" class="level-opt' + (tags.level !== 'expert' ? ' active' : '') + '" data-level="novice" title="AI 用大白话和生活化例子讲，术语带翻译">🐣 新手</button>' +
-      '  <button type="button" class="level-opt' + (tags.level === 'expert' ? ' active' : '') + '" data-level="expert" title="AI 按工程师方式对话，直接给专业细节、参数和取舍">🦅 老手</button>' +
-      '</div>' +
-      '<div class="sub-label" style="margin-top:14px">方向偏好（可多选：学习路线会优先深入这些方向）</div>' +
-      '<div class="focus-row" id="pf-focus">' + FOCUS_OPTIONS.map(function (f) {
-        var on = (tags.focus || []).indexOf(f.k) !== -1;
-        return '<button type="button" class="tag-chip' + (on ? ' on' : '') + '" data-focus="' + f.k + '" title="' + f.tip + '">' + f.label + '</button>';
-      }).join('') + '</div>' +
-      '<div class="modal-ops">' +
-      '  <button class="btn" id="pf-cancel">取消</button>' +
-      '  <button class="btn primary" id="pf-save" title="保存后立刻生效：AI 问答和路线推荐都会按新画像来">保存画像</button>' +
-      '</div>';
-    profileModalEl.classList.remove('hidden');
-
-    profileBodyEl.querySelectorAll('#pf-level .level-opt').forEach(function (b) {
-      b.addEventListener('click', function () {
-        profileBodyEl.querySelectorAll('#pf-level .level-opt').forEach(function (x) { x.classList.toggle('active', x === b); });
-      });
-    });
-    profileBodyEl.querySelectorAll('#pf-focus .tag-chip').forEach(function (b) {
-      b.addEventListener('click', function () { b.classList.toggle('on'); });
-    });
-    document.getElementById('pf-cancel').addEventListener('click', function () { profileModalEl.classList.add('hidden'); });
-    document.getElementById('pf-save').addEventListener('click', saveProfile);
-    loadProfileContrib();
-  }
 
   /** 个人中心里的贡献摘要 + 迷你热力日历（近 90 天） */
-  function loadProfileContrib() {
-    api('GET', '/contributions/me').then(function (r) {
-      var box = document.getElementById('pf-contrib');
-      if (!box) return;
-      if (!r.ok) { box.innerHTML = ''; return; }
-      var d = r.data;
-      var active = (d.days || []).filter(function (x) { return x.count > 0; }).length;
-      box.innerHTML = '<div style="margin-bottom:6px"><b style="color:var(--accent);font-size:16px">' + d.total + ' 分</b>' +
-        '<span class="muted"> · 近 90 天活跃 ' + active + ' 天（上传+8/篇 · 沉淀+5 · 注释+2，完整热力图见「📤 上传知识」页）</span></div>' +
-        miniHeatmap(d.days || []);
-    }).catch(function () {
-      var box = document.getElementById('pf-contrib');
-      if (box) box.innerHTML = '';
-    });
-  }
 
-  function miniHeatmap(days) {
-    var map = {};
-    days.forEach(function (d) { map[d.date] = d; });
-    function fmt(d) {
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    }
-    var today = new Date(); today.setHours(0, 0, 0, 0);
-    var start = new Date(today);
-    start.setDate(start.getDate() - 89);
-    start.setDate(start.getDate() - start.getDay());
-    var html = '<div class="hm-grid hm-mini">';
-    for (var d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
-      if (d.getDay() === 0) html += '<div class="hm-col">';
-      var key = fmt(d);
-      var pts = map[key] ? map[key].points : 0;
-      var lv = pts === 0 ? 0 : pts < 5 ? 1 : pts < 10 ? 2 : pts < 20 ? 3 : 4;
-      html += '<div class="hm-cell lv' + lv + '" title="' + key + '：' + pts + ' 分"></div>';
-      if (d.getDay() === 6) html += '</div>';
-    }
-    if (d.getDay() !== 0) html += '</div>';
-    return html + '</div>';
-  }
 
-  function saveProfile() {
-    var levelBtn = profileBodyEl.querySelector('#pf-level .level-opt.active');
-    var focus = [];
-    profileBodyEl.querySelectorAll('#pf-focus .tag-chip.on').forEach(function (b) { focus.push(b.dataset.focus); });
-    var btn = document.getElementById('pf-save');
-    btn.disabled = true; btn.textContent = '保存中…';
-    api('PUT', '/auth/profile', { level: levelBtn ? levelBtn.dataset.level : 'novice', focus: focus })
-      .then(function (r) {
-        btn.disabled = false; btn.textContent = '保存画像';
-        if (!r.ok) return toast('保存失败：' + ((r.data && r.data.error) || r.status));
-        state.profileTags = r.data.profileTags;
-        profileModalEl.classList.add('hidden');
-        renderAuthArea();
-        toast('✅ 画像已保存，AI 问答与路线推荐将按新画像生效');
-      })
-      .catch(function () { btn.disabled = false; btn.textContent = '保存画像'; toast('保存失败：无法连接服务'); });
-  }
-  document.getElementById('profile-close').addEventListener('click', function () { profileModalEl.classList.add('hidden'); });
-  profileModalEl.addEventListener('click', function (e) { if (e.target === profileModalEl) profileModalEl.classList.add('hidden'); });
 
   /* ---------- 全局轻提示 ---------- */
   var toastEl = null, toastTimer = null;
@@ -438,73 +344,9 @@
   }
 
   /* ---------- 登录 / 注册弹窗 ---------- */
-  var modalEl = document.getElementById('auth-modal');
-  var authTitleEl = document.getElementById('auth-title');
-  var authSubmitEl = document.getElementById('auth-submit');
-  var authSwitchEl = document.getElementById('auth-switch');
-  var authErrorEl = document.getElementById('auth-error');
-  var authFormEl = document.getElementById('auth-form');
-  var authMode = 'login';
 
-  function openAuthModal(mode) {
-    authMode = mode === 'register' ? 'register' : 'login';
-    authTitleEl.textContent = authMode === 'register' ? '注册' : '登录';
-    authSubmitEl.textContent = authMode === 'register' ? '注册并登录' : '登录';
-    authSwitchEl.textContent = authMode === 'register' ? '已有账号？去登录' : '没有账号？注册一个';
-    document.getElementById('auth-invite-label').classList.toggle('hidden', authMode !== 'register');
-    document.getElementById('auth-level-row').classList.toggle('hidden', authMode !== 'register');
-    authErrorEl.classList.add('hidden');
-    modalEl.classList.remove('hidden');
-    document.getElementById('auth-username').focus();
-  }
 
-  function closeAuthModal() { modalEl.classList.add('hidden'); }
 
-  document.getElementById('auth-close').addEventListener('click', closeAuthModal);
-  modalEl.addEventListener('click', function (e) { if (e.target === modalEl) closeAuthModal(); });
-  authSwitchEl.addEventListener('click', function () { openAuthModal(authMode === 'register' ? 'login' : 'register'); });
-
-  // 注册弹窗里的新手/老手选择
-  document.querySelectorAll('#auth-level-row .level-opt').forEach(function (b) {
-    b.addEventListener('click', function () {
-      document.querySelectorAll('#auth-level-row .level-opt').forEach(function (x) { x.classList.toggle('active', x === b); });
-    });
-  });
-
-  authFormEl.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var username = document.getElementById('auth-username').value.trim();
-    var password = document.getElementById('auth-password').value;
-    var payload = { username: username, password: password };
-    if (authMode === 'register') {
-      payload.inviteCode = document.getElementById('auth-invite').value.trim();
-      var lvBtn = document.querySelector('#auth-level-row .level-opt.active');
-      payload.level = lvBtn ? lvBtn.dataset.level : 'novice';
-    }
-    authErrorEl.classList.add('hidden');
-    authSubmitEl.disabled = true;
-    api('POST', '/auth/' + authMode, payload)
-      .then(function (r) {
-        authSubmitEl.disabled = false;
-        if (!r.ok) {
-          authErrorEl.textContent = (r.data && r.data.error) || '请求失败，请确认服务已启动（npm start）';
-          authErrorEl.classList.remove('hidden');
-          return;
-        }
-        state.token = r.data.token;
-        state.user = r.data.username;
-        state.role = r.data.role || null;
-        state.profileTags = r.data.profileTags || state.profileTags;
-        localStorage.setItem(TOKEN_KEY, state.token);
-        closeAuthModal();
-        Promise.all([loadProgress(), loadFavorites()]).then(loadDynamicKnowledge);
-      })
-      .catch(function () {
-        authSubmitEl.disabled = false;
-        authErrorEl.textContent = '无法连接服务，请先运行 npm start';
-        authErrorEl.classList.remove('hidden');
-      });
-  });
 
   function logout() {
     api('POST', '/auth/logout').catch(function () {});
@@ -529,7 +371,7 @@
   }
 
   function toggleFavorite(id) {
-    if (!state.user) { openAuthModal('login'); return toast('登录后可收藏知识点'); }
+    if (!state.user) { window.dispatchEvent(new CustomEvent('kg:ui', { detail: { dialog: 'auth', mode: 'login' } })); return toast('登录后可收藏知识点'); }
     var on = !state.favorites[id];
     // 乐观更新
     if (on) state.favorites[id] = true; else delete state.favorites[id];
@@ -1289,8 +1131,6 @@
       '  <div class="panel-file">' + esc(n.ai ? ('AI 问答沉淀 · 由 ' + (n.createdBy || '?') + ' 提问') : n.file) + ' · 更新于 ' + esc(n.updatedAt || '-') + '</div>' +
       (n.summary ? '<div class="panel-summary">' + esc(n.summary) + '</div>' : '') +
       '</div>' +
-      '<div class="panel-side panel-level">' + levelSection(n) + '</div>' +
-      noteSection(n) +
       '<div class="panel-body md">' + mdToHtml(n.content || '（暂无内容）') + '</div>' +
     '<div class="panel-side">' +
     '  <div class="side-title">关联知识点</div>' +
@@ -1427,59 +1267,9 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeReader(); });
 
   /** 我的笔记（仅自己可见，按节点一条，随账号保存） */
-  function noteSection(node) {
-    if (state.offline) return '';
-    if (!state.user) {
-      return '<div class="panel-side"><div class="side-title">📝 我的笔记</div><div class="muted">登录后可以写只给自己看的笔记（理解、待办、联想都行）</div></div>';
-    }
-    return '<div class="panel-side note-side">' +
-      '<div class="side-title">📝 我的笔记（仅自己可见）</div>' +
-      '<textarea id="note-area" class="note-textarea" rows="4" placeholder="写点只有自己看的理解 / 待办 / 联想……保存在你的账号下，换电脑登录也在"></textarea>' +
-      '<div class="note-ops"><button class="btn small primary" id="note-save" title="保存这篇的个人笔记">保存笔记</button>' +
-      '<span class="muted" id="note-status"></span></div>' +
-      '</div>';
-  }
 
-  function loadNote(id, root) {
-    var area = root.querySelector('#note-area');
-    if (!area) return;
-    api('GET', '/notes?nodeId=' + encodeURIComponent(id)).then(function (r) {
-      if (r.ok && area && document.activeElement !== area) area.value = r.data.note || '';
-    }).catch(function () {});
-  }
 
-  function saveNote(id, root) {
-    var area = root.querySelector('#note-area');
-    var status = root.querySelector('#note-status');
-    if (!area) return;
-    var btn = root.querySelector('#note-save');
-    btn.disabled = true; btn.textContent = '保存中…';
-    api('PUT', '/notes', { nodeId: id, content: area.value }).then(function (r) {
-      btn.disabled = false; btn.textContent = '保存笔记';
-      if (!r.ok) return toast('保存失败：' + ((r.data && r.data.error) || r.status));
-      if (status) status.textContent = '已保存 ' + new Date().toLocaleTimeString('zh-CN');
-      toast('📝 笔记已保存（仅自己可见）');
-    }).catch(function () { btn.disabled = false; btn.textContent = '保存笔记'; toast('保存失败：无法连接服务'); });
-  }
 
-  function levelSection(node) {
-    if (state.offline) {
-      return '<div class="side-title">学习程度</div><div class="muted">离线只读模式，启动 <code>npm start</code> 并登录后可标注</div>';
-    }
-    if (!state.user) {
-      return '<div class="side-title">学习程度</div><div class="muted">登录后可标注学习程度</div>';
-    }
-    var current = levelOf(node.id);
-    var btns = LEVELS.map(function (l) {
-      var active = l.v === current;
-      return '<button class="lvl-btn' + (active ? ' active' : '') + '" data-level="' + l.v + '"' +
-        (active ? ' style="border-color:' + l.color + ';color:' + l.color + '"' : '') + '>' + l.name + '</button>';
-    }).join('');
-    var updatedAt = (state.progress[node.id] || {}).updatedAt;
-    return '<div class="side-title">学习程度' +
-      (updatedAt ? ' <span class="muted">· 更新于 ' + esc(updatedAt) + '</span>' : '') + '</div>' +
-      '<div class="level-row" data-node="' + esc(node.id) + '">' + btns + '</div>';
-  }
 
   function setLevel(id, level) {
     if (!state.user) return;
@@ -1550,6 +1340,8 @@
     toast: toast, refreshAll: refreshAll, openPanel: openPanel,
     loadDynamicKnowledge: loadDynamicKnowledge,
     nodeById: function (id) { return nodesById[id] || null; },
+    setLevel: setLevel, levelOf: levelOf, LEVELS: LEVELS,
+    recordHistory: recordHistory,
     refreshAnnotations: function (id) {
       // 注释保存/删除后重开当前面板（阅读视图也同步刷新）
       if (state.selected === id) {
@@ -1559,7 +1351,7 @@
     },
     requireLogin: function () {
       if (state.offline) { toast('离线只读模式，请先用 npm start 启动服务'); return false; }
-      if (!state.user) { openAuthModal('login'); toast('请先登录后使用'); return false; }
+      if (!state.user) { window.dispatchEvent(new CustomEvent('kg:ui', { detail: { dialog: 'auth', mode: 'login' } })); toast('请先登录后使用'); return false; }
       return true;
     }
   };
