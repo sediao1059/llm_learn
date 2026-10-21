@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>上传知识 · LLM 学习知识图谱</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="subpage">
+  <header>
+    <h1>📤 上传知识</h1>
+    <div class="toolbar">
+      <a class="btn small" href="index.html" title="回到知识图谱首页">← 回图谱</a>
+      <div id="page-user"></div>
+    </div>
+  </header>
+
+  <main class="paths-main">
+    <div class="upload-cols">
+      <section class="upload-main">
+        <p class="muted" style="margin:0 0 12px">发一个文章链接、或直接粘贴大段文本——AI 会自动<b>拆解成知识点</b>（生成检索标签、找好关联、建议归入哪个专栏），管理员审核通过后进入知识图谱。<b>💬 助手用来提问解答，这里用来贡献知识</b>，两边入口分开。</p>
+        <nav class="sub-tabs" id="upload-tabs">
+          <button class="sub-tab active" data-mode="url" title="粘贴一篇文章的网址，AI 自动抓正文并提取扩写成知识点">🔗 发链接</button>
+          <button class="sub-tab" data-mode="text" title="把学习笔记/收藏的长文直接粘贴进来，AI 帮你格式化成知识点">📝 贴文本</button>
+        </nav>
+        <div id="upload-form"></div>
+
+        <div class="side-title" style="margin-top:24px">我的上传</div>
+        <div id="my-uploads"><p class="muted">加载中…</p></div>
+      </section>
+      <aside class="upload-side">
+        <div class="side-title">我的贡献（近 90 天）</div>
+        <div id="contrib-summary"><p class="muted">加载中…</p></div>
+        <div id="heatmap" class="heatmap"></div>
+        <p class="muted" style="font-size:12px">计分规则：上传入库 +8/篇 · 沉淀审核通过 +5 · 划词注释通过 +2（贡献排行榜即将上线）</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="js/common.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="js/upload.js"></script>
+</body>
+</html>

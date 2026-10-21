@@ -340,13 +340,15 @@
     });
   }
 
-  /* ---------- 沉淀为知识点（预览 → 确认） ---------- */
+  /* ---------- 沉淀为知识点（管理员：预览 → 确认；普通用户：填表单提交审核） ---------- */
   var previewing = null; // 服务端返回的预览数据
 
   function startPreview(questionId, answerId, btn) {
     if (!currentChatId || !answerId || !questionId) {
       return toast('该回答缺少配对的提问记录，无法沉淀');
     }
+    // 普通用户走审核流：填表单提交，管理员审核时才做 AI 信息抽取
+    if (KG_APP.state.role !== 'admin') return openSubmitModal(questionId, answerId);
     var old = btn.textContent;
     btn.disabled = true; btn.textContent = '⏳ AI 正在与已有知识点对比…';
     api('POST', '/ai/knowledge/preview', {
@@ -359,6 +361,63 @@
     }).catch(function () {
       btn.disabled = false; btn.textContent = old;
       toast('生成失败：无法连接服务');
+    });
+  }
+
+  /* ---------- 普通用户：提交审核表单（星级 + 两条备注） ---------- */
+  var subQid = null, subAid = null, subStars = 3;
+
+  function openSubmitModal(questionId, answerId) {
+    subQid = questionId; subAid = answerId; subStars = 3;
+    var starBtns = [1, 2, 3, 4, 5].map(function (v) {
+      return '<button type="button" class="star-btn" data-v="' + v + '" title="' + v + ' 星">' + (v <= 3 ? '★' : '☆') + '</button>';
+    }).join('');
+    knowBodyEl.innerHTML =
+      '<span class="know-badge create">📤 提交给管理员审核</span>' +
+      '<div class="muted" style="margin-bottom:12px">提交后不直接进图谱；管理员审核时会用 AI 做信息抽取、判断怎么放进图谱。你填的信息能帮管理员更快判断。</div>' +
+      '<label class="sub-label">重要程度（管理员优先看星级高的）</label>' +
+      '<div class="star-row" id="sub-stars">' + starBtns + '</div>' +
+      '<label class="sub-label">文章备注（不超过 100 字，会跟着这篇知识展示）' +
+      '<input id="sub-article-note" maxlength="100" placeholder="一句话说明讲什么，如：RAG 检索优化的实战总结"></label>' +
+      '<label class="sub-label">给审核人的备注（可选）' +
+      '<textarea id="sub-review-note" rows="3" maxlength="500" placeholder="想对管理员说的话，如：这块我不确定理解对不对，帮我看看"></textarea></label>' +
+      '<div class="modal-ops">' +
+      '  <button class="btn" id="sub-cancel">取消</button>' +
+      '  <button class="btn primary" id="sub-confirm">📤 提交审核</button>' +
+      '</div>';
+    knowModalEl.classList.remove('hidden');
+    renderStars();
+    knowBodyEl.querySelectorAll('.star-btn').forEach(function (b) {
+      b.addEventListener('click', function () { subStars = Number(b.dataset.v); renderStars(); });
+    });
+    document.getElementById('sub-cancel').addEventListener('click', closeKnowModal);
+    document.getElementById('sub-confirm').addEventListener('click', submitDeposit);
+  }
+
+  function renderStars() {
+    knowBodyEl.querySelectorAll('.star-btn').forEach(function (b) {
+      var on = Number(b.dataset.v) <= subStars;
+      b.textContent = on ? '★' : '☆';
+      b.classList.toggle('on', on);
+    });
+  }
+
+  function submitDeposit() {
+    var btn = document.getElementById('sub-confirm');
+    btn.disabled = true; btn.textContent = '提交中…';
+    api('POST', '/ai/submissions', {
+      chatId: currentChatId, questionId: subQid, answerId: subAid,
+      importance: subStars,
+      articleNote: document.getElementById('sub-article-note').value.trim(),
+      reviewNote: document.getElementById('sub-review-note').value.trim()
+    }).then(function (r) {
+      btn.disabled = false; btn.textContent = '📤 提交审核';
+      if (!r.ok) return toast('提交失败：' + ((r.data && r.data.error) || r.status));
+      closeKnowModal();
+      toast('✅ 已提交，审核通过后就会出现在图谱上（进度看「📥 沉淀中心」）');
+    }).catch(function () {
+      btn.disabled = false; btn.textContent = '📤 提交审核';
+      toast('提交失败：无法连接服务');
     });
   }
 

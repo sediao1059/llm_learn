@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理中心 · LLM 学习知识图谱</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="subpage">
+  <header>
+    <h1>🛡 管理中心</h1>
+    <div class="toolbar">
+      <a class="btn small" href="index.html" title="回到知识图谱首页">← 回图谱</a>
+      <div id="page-user"></div>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <nav class="sub-tabs" id="admin-tabs">
+      <button class="sub-tab active" data-tab="users" title="查看全部注册用户、临时封禁或解封账号、调整谁是管理员">用户管理</button>
+      <button class="sub-tab" data-tab="invites" title="生成和管理注册邀请码：可重复使用、可随时停用，只有拿到码的人才能注册">邀请码</button>
+      <button class="sub-tab" data-tab="reviews" title="处理普通用户提交的知识沉淀：AI 提取后决定新建还是合并进图谱，或驳回">沉淀审核</button>
+      <button class="sub-tab" data-tab="uploads" title="审核用户上传的链接/文本：AI 已拆解成知识点，确认后并入或新建「专栏」入图谱">上传审核</button>
+      <button class="sub-tab" data-tab="interview" title="查看每篇笔记的高频面试题注释状态；缺的一键用 AI 补全（读者在笔记里点标题就能复习）">面试题</button>
+      <button class="sub-tab" data-tab="paths" title="管理官方学习路线（学习路线页置顶可直接选择）；支持从文章链接一键导入并自动补充缺失知识点">学习路线</button>
+      <button class="sub-tab" data-tab="tiers" title="查看/重算知识图谱首页「大纲视图」的分层选举（每晚自动跑，也可手动立即重算）">图谱分层</button>
+      <button class="sub-tab" data-tab="jobs" title="查看全部后台定时任务（分层选举/缓存预热/热门统计），可手动立即执行">定时任务</button>
+    </nav>
+    <section id="tab-users" class="sub-panel"></section>
+    <section id="tab-invites" class="sub-panel hidden"></section>
+    <section id="tab-reviews" class="sub-panel hidden"></section>
+    <section id="tab-uploads" class="sub-panel hidden"></section>
+    <section id="tab-interview" class="sub-panel hidden"></section>
+    <section id="tab-paths" class="sub-panel hidden"></section>
+    <section id="tab-tiers" class="sub-panel hidden"></section>
+    <section id="tab-jobs" class="sub-panel hidden"></section>
+  </main>
+
+  <script src="js/common.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

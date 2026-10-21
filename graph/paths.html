@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 学习路线 · LLM 学习知识图谱</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="subpage">
+  <header>
+    <h1>🗺 AI 学习路线</h1>
+    <div class="toolbar">
+      <a class="btn small" href="index.html" title="回到知识图谱首页">← 回图谱</a>
+      <div id="page-user"></div>
+    </div>
+  </header>
+
+  <main class="paths-main">
+    <div class="paths-cols">
+      <aside class="paths-side">
+        <div class="side-title">已保存的路线</div>
+        <div id="paths-list"><p class="muted">加载中…</p></div>
+      </aside>
+      <section class="paths-work">
+        <div id="paths-chat" class="paths-chat">
+          <div class="paths-empty-hint">
+            <div style="font-size:30px">🗺</div>
+            <p><b>和 AI 聊出你的学习路线</b></p>
+            <p class="muted">告诉它你想学什么，它会根据图谱里已有的知识点，排一条「先学什么、后学什么」的路线；<br>不满意就继续提要求（比如「少一点数学」「加些实战项目」），它会迭代调整。</p>
+            <p class="muted">例如：我是后端开发，会 Java，想学会用大模型搭 RAG 应用</p>
+          </div>
+        </div>
+        <div class="ai-input-row">
+          <textarea id="path-input" rows="2" placeholder="输入学习目标，或对当前路线提调整要求…（Enter 发送，Shift+Enter 换行）"></textarea>
+          <button id="path-send" class="btn primary" title="让 AI 基于已有知识图谱生成/调整学习路线">生成路线</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 知识标题映射走 common.js 的 knowledgeTitles()（bundle.json 公开接口），不再依赖静态 knowledge.js -->
+  <script src="js/common.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="js/paths.js"></script>
+</body>
+</html>
