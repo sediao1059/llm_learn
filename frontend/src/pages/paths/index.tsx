@@ -3,7 +3,7 @@ import { Card, Progress, Tag, Button, Empty, Spin, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import TreeView from './TreeView';
 import GenerateModal from './GenerateModal';
-import ArticleDrawer from './ArticleDrawer';
+import KnowledgeDrawer from '../../components/KnowledgeDrawer';
 import { useAuth } from '../../store/auth';
 
 const headers = () => ({
@@ -11,7 +11,6 @@ const headers = () => ({
   Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
 });
 
-/** 从路线树中按顺序收集所有 refId */
 function collectRouteRefIds(tree: any): string[] {
   if (!tree?.stages) return [];
   const collect = (items: any[]): string[] =>
@@ -30,8 +29,6 @@ export default function PathsPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [genPathId, setGenPathId] = useState<number | undefined>();
 
-  // ArticleDrawer 状态
-  const [articleOpen, setArticleOpen] = useState(false);
   const [articleNodeId, setArticleNodeId] = useState<string | null>(null);
   const [extending, setExtending] = useState(false);
 
@@ -49,13 +46,9 @@ export default function PathsPage() {
         for (const [id, v] of Object.entries(pr.progress)) prog[id] = (v as any).level || 0;
       }
       setProgress(prog);
-      // refId → title + node data
       const titles: Record<string, string> = {};
       const dataMap: Record<string, any> = {};
-      for (const n of kb.nodes || []) {
-        titles[n.id] = n.title;
-        dataMap[n.id] = n;
-      }
+      for (const n of kb.nodes || []) { titles[n.id] = n.title; dataMap[n.id] = n; }
       setRefTitles(titles);
       setNodeDataMap(dataMap);
       if (list.length && !selectedId) setSelectedId(list[0].id);
@@ -94,33 +87,15 @@ export default function PathsPage() {
 
   const selected = paths.find(p => p.id === selectedId);
   const routeRefIds = selected ? collectRouteRefIds(selected.tree) : [];
-
-  // ArticleDrawer 相关
-  const openArticle = useCallback((refId: string) => {
-    setArticleNodeId(refId);
-    setArticleOpen(true);
-  }, []);
-
-  const closeArticle = () => {
-    setArticleOpen(false);
-    setArticleNodeId(null);
-  };
-
-  // 计算上/下一个
   const currentNodeIdx = articleNodeId ? routeRefIds.indexOf(articleNodeId) : -1;
   const prevId = currentNodeIdx > 0 ? routeRefIds[currentNodeIdx - 1] : undefined;
   const nextId = currentNodeIdx >= 0 && currentNodeIdx < routeRefIds.length - 1 ? routeRefIds[currentNodeIdx + 1] : undefined;
-
-  // 当前文章数据
   const articleNode = articleNodeId ? nodeDataMap[articleNodeId] : null;
   const articleInRoute = articleNodeId ? routeRefIds.includes(articleNodeId) : false;
-
-  // 关联节点
   const linkedNodes = articleNode?.links
     ?.filter((id: string) => nodeDataMap[id])
     ?.map((id: string) => ({ id, title: nodeDataMap[id].title })) || [];
 
-  // 扩展路线
   const extendRoute = async (nodeId: string) => {
     if (!selectedId) return;
     setExtending(true);
@@ -132,18 +107,13 @@ export default function PathsPage() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.message || '整合失败');
       message.success('✅ 已加入路线');
-      // 更新路线树
       setPaths(prev => prev.map(p => p.id === selectedId ? { ...p, tree: d.tree } : p));
-    } catch (e: any) {
-      message.error(e.message);
-    } finally {
-      setExtending(false);
-    }
+    } catch (e: any) { message.error(e.message); }
+    finally { setExtending(false); }
   };
 
   return (
     <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)', maxWidth: 1280, margin: '0 auto' }}>
-      {/* 左侧 */}
       <div style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', paddingTop: 60 }}><Spin /></div>
@@ -187,7 +157,6 @@ export default function PathsPage() {
         </Button>
       </div>
 
-      {/* 右侧树形 */}
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', paddingRight: 4 }}>
         {selected ? (
           <TreeView
@@ -198,7 +167,7 @@ export default function PathsPage() {
             onBatchLevel={batchSetLevel}
             onAIAdjust={() => { setGenPathId(selected.id); setGenOpen(true); }}
             onTitleChange={(id, title) => setPaths(prev => prev.map(p => p.id === id ? { ...p, title } : p))}
-            onArticleOpen={openArticle}
+            onArticleOpen={(refId) => setArticleNodeId(refId)}
           />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -207,14 +176,12 @@ export default function PathsPage() {
         )}
       </div>
 
-      {/* 文章阅读 Drawer */}
       {articleNodeId && (
-        <ArticleDrawer
-          open={articleOpen}
-          onClose={closeArticle}
+        <KnowledgeDrawer
+          open={!!articleNodeId}
+          onClose={() => setArticleNodeId(null)}
           nodeId={articleNodeId}
           nodeData={articleNode}
-          nodeTitle={articleNode?.title || refTitles[articleNodeId] || articleNodeId}
           level={progress[articleNodeId] || 0}
           onLevelChange={setLevel}
           prevId={prevId}
@@ -228,12 +195,12 @@ export default function PathsPage() {
           extending={extending}
           linkedNodes={linkedNodes}
           onOpenLinked={(refId) => setArticleNodeId(refId)}
-          userRole={user?.role || 'user'}
+          isLoggedIn={!!user}
+          userRole={user?.role}
           onAnnotationSaved={() => message.success('注释已保存')}
         />
       )}
 
-      {/* AI 生成弹窗 */}
       <GenerateModal
         open={genOpen}
         onClose={() => setGenOpen(false)}

@@ -5,3 +5,14 @@ body {
   color: #1a1a1a;
 }
 #root { min-height: 100vh; }
+
+/* 知识 Drawer 内的选中效果：浅红底 + 深红文字（模拟红色下划线视觉） */
+.knowledge-drawer ::selection {
+  background: rgba(245, 34, 45, 0.12);
+  color: #c41d7f;
+  text-shadow: none;
+}
+.knowledge-drawer ::-moz-selection {
+  background: rgba(245, 34, 45, 0.12);
+  color: #c41d7f;
+}

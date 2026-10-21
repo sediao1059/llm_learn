@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Card, Tag, Button, Drawer, Empty, Spin, FloatButton, Modal, Input, message } from 'antd';
+import { Spin } from 'antd';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/auth';
-import AnnotationModal from './AnnotationModal';
-import MarkdownContent from '../../components/MarkdownContent';
+import KnowledgeDrawer from '../../components/KnowledgeDrawer';
 
 interface KnowledgeData {
   nodes: any[]; edges: any[]; categories: string[]; layers: string[];
@@ -13,36 +12,38 @@ interface KnowledgeData {
 
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
-  const drawerBodyRef = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   const [data, setData] = useState<KnowledgeData | null>(null);
   const [aiData, setAiData] = useState<any>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [noteText, setNoteText] = useState('');
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-
-  // 划词注释
-  const [annoOpen, setAnnoOpen] = useState(false);
-  const [anchorText, setAnchorText] = useState('');
-  const [selectionPos, setSelectionPos] = useState<{x: number; y: number} | null>(null);
+  const [progress, setProgress] = useState<Record<string, number>>({});
   const [annotations, setAnnotations] = useState<any[]>([]);
-  const [annotationsKey, setAnnotationsKey] = useState(0);
+  const [annKey, setAnnKey] = useState(0);
 
   useEffect(() => {
     api.get('/knowledge/bundle.json').then(r => setData(r.data)).catch(() => {});
-    if (user) api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
+    if (user) {
+      api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
+      api.get('/progress').then(r => {
+        const prog: Record<string, number> = {};
+        if (r.data?.progress) {
+          for (const [id, v] of Object.entries(r.data.progress)) prog[id] = (v as any).level || 0;
+        }
+        setProgress(prog);
+      }).catch(() => {});
+    }
   }, [user]);
 
+  // 加载注释
   useEffect(() => {
     if (selected && user) {
       api.get(`/ai/annotations?nodeId=${selected}`).then(r => {
         setAnnotations(r.data?.annotations || []);
-      }).catch(() => {});
+      }).catch(() => setAnnotations([]));
     } else setAnnotations([]);
-  }, [selected, user, annotationsKey]);
+  }, [selected, user, annKey]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -72,21 +73,15 @@ export default function GraphPage() {
       tooltip: {
         trigger: 'item',
         className: 'kg-tip',
-        backgroundColor: '#fff',
-        borderColor: '#e5e6eb',
-        padding: [8, 12],
+        backgroundColor: '#fff', borderColor: '#e5e6eb', padding: [8, 12],
         textStyle: { color: '#333', fontSize: 13 },
-        extraCssText: 'max-width: 45vw; white-space: normal; word-break: break-word; word-wrap: break-word; box-shadow: 0 4px 14px rgba(0,0,0,0.12); border-radius: 8px;',
-        position: function (point: number[], params: any, dom: HTMLElement, rect: any, size: any) {
-          // 优先贴在节点左上方，放不下时自动翻转，确保不超出图谱区域
-          const tipW = size.contentSize[0];
-          const tipH = size.contentSize[1];
+        extraCssText: 'max-width: 45vw; white-space: normal; word-break: break-word; box-shadow: 0 4px 14px rgba(0,0,0,0.12); border-radius: 8px;',
+        position: function (point: number[], _params: any, _dom: HTMLElement, _rect: any, size: any) {
+          const tipW = size.contentSize[0]; const tipH = size.contentSize[1];
           const chartW = chart.current ? chart.current.getWidth() : 800;
           const chartH = chart.current ? chart.current.getHeight() : 600;
-          let x = point[0] - tipW - 14;
-          let y = point[1] - tipH - 10;
-          if (x < 4) x = point[0] + 14;
-          if (y < 4) y = point[1] + 14;
+          let x = point[0] - tipW - 14; let y = point[1] - tipH - 10;
+          if (x < 4) x = point[0] + 14; if (y < 4) y = point[1] + 14;
           if (x + tipW > chartW - 4) x = chartW - tipW - 4;
           if (y + tipH > chartH - 4) y = chartH - tipH - 4;
           return [Math.max(4, x), Math.max(4, y)];
@@ -121,158 +116,42 @@ export default function GraphPage() {
       }],
     }, true);
     chart.current.on('click', (p: any) => {
-      if (p.dataType === 'node') {
-        setSelected(p.data.value.id);
-        setNoteOpen(true);
-      }
+      if (p.dataType === 'node') setSelected(p.data.value.id);
     });
   }, [data, aiData]);
 
   const node = data?.nodes.find(n => n.id === selected) || aiData?.nodes?.find((n: any) => n.id === selected);
 
-  /**
-   * 摘要去重：笔记正文开头的「> **一句话**：…」blockquote 与上方摘要 Card 内容同源，
-   * 已有摘要 Card 时正文里跳过这一段，避免同一句话读两遍；无摘要或格式不符则原样渲染。
-   */
-  const stripLeadingOneliner = (content: string | undefined, summary?: string): string => {
-    if (!content || !summary) return content || '';
-    const lines = content.split('\n');
-    const start = lines.findIndex(l => l.trimStart().startsWith('>'));
-    if (start < 0 || !/^>\s*\*\*一句话\*\*\s*[:：]/.test(lines[start])) return content;
-    let end = start;
-    while (end < lines.length && lines[end].trimStart().startsWith('>')) end++;
-    if (lines[end] && !lines[end].trim()) end++; // 连带吞掉紧跟的空行，保持间距
-    return lines.slice(0, start).concat(lines.slice(end)).join('\n');
+  const setLevel = async (refId: string, level: number) => {
+    setProgress(prev => ({ ...prev, [refId]: level }));
+    await api.put('/progress', { nodeId: refId, level });
   };
 
-  // 划词检测
-  const handleMouseUp = useCallback(() => {
-    if (!user || !noteOpen) { setSelectionPos(null); return; }
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) { setSelectionPos(null); return; }
-    const text = sel.toString().trim();
-    if (!text || text.length < 2 || text.length > 1000) { setSelectionPos(null); return; }
-    const range = sel.getRangeAt(0);
-    const container = drawerBodyRef.current;
-    if (!container || !container.contains(range.commonAncestorContainer)) { setSelectionPos(null); return; }
-    const rect = range.getBoundingClientRect();
-    setAnchorText(text);
-    setSelectionPos({ x: rect.left + rect.width / 2, y: rect.top - 8 });
-  }, [user, noteOpen]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.anno-float-btn')) setSelectionPos(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const openAnnotation = () => {
-    setAnnoOpen(true);
-    setSelectionPos(null);
-    window.getSelection()?.removeAllRanges();
-  };
-
-  const refreshAnnotations = () => setAnnotationsKey(k => k + 1);
+  // 关联节点
+  const linkedNodes = node?.links
+    ?.map((id: string) => {
+      const linked = data?.nodes.find(n => n.id === id) || aiData?.nodes?.find((n: any) => n.id === id);
+      return linked ? { id, title: linked.title } : null;
+    })
+    ?.filter(Boolean) || [];
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
       <div ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
 
-      <Drawer
-        open={noteOpen && !!selected}
-        onClose={() => { setNoteOpen(false); setSelected(null); }}
-        width={500} title={node?.title || ''}
-        destroyOnClose
-      >
-        {node ? (
-          <div ref={drawerBodyRef} onMouseUp={handleMouseUp} style={{ userSelect: 'text' }}>
-            <div style={{ marginBottom: 8 }}>
-              <Tag color="blue">{node.layer || '未分层'}</Tag>
-              <Tag color="geekblue">{node.category}</Tag>
-              {node.difficulty && <Tag color="orange">{node.difficulty}</Tag>}
-              {node.status === 'todo' && <Tag>待学习</Tag>}
-              {node.ai && <Tag color="purple">✨ AI 沉淀</Tag>}
-            </div>
-            {node.summary && (
-              <Card size="small" style={{ marginBottom: 12, background: '#f6f6f6' }}>{node.summary}</Card>
-            )}
-            {node.tags?.length > 0 && (
-              <div style={{ marginBottom: 12 }}>{node.tags.map((t: string) => <Tag key={t}>{t}</Tag>)}</div>
-            )}
-            <MarkdownContent content={stripLeadingOneliner(node.content, node.summary)} />
-
-            {annotations.length > 0 && (
-              <Card title={`💬 本篇注释（${annotations.length}）`} size="small" style={{ marginTop: 16 }}>
-                {annotations.map((a: any) => (
-                  <div key={a.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <Tag style={{ fontSize: 10 }}>{a.type === 'word' ? '词' : a.type === 'sentence' ? '句' : a.type === 'document' ? '整篇' : a.type}</Tag>
-                      <Tag color={a.status === 'approved' ? 'success' : a.status === 'pending' ? 'warning' : 'error'} style={{ fontSize: 10 }}>
-                        {a.status === 'approved' ? '已审核' : a.status === 'pending' ? '待审核' : '驳回'}
-                      </Tag>
-                      <span style={{ fontSize: 11, color: '#bfbfbf', marginLeft: 'auto' }}>{a.createdBy}</span>
-                    </div>
-                    {a.anchorText && <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 4 }}>「{a.anchorText.slice(0, 50)}…」</div>}
-                    <MarkdownContent content={a.answer || ''} fontSize={12.5} />
-                  </div>
-                ))}
-              </Card>
-            )}
-          </div>
-        ) : <Empty description="点击左侧节点查看笔记" />}
-      </Drawer>
-
-      {selectionPos && (
-        <button
-          className="anno-float-btn"
-          onClick={openAnnotation}
-          style={{
-            position: 'fixed', left: selectionPos.x - 30, top: selectionPos.y - 36,
-            zIndex: 1000, padding: '4px 12px', borderRadius: 6,
-            background: '#1677ff', color: '#fff', border: 'none',
-            cursor: 'pointer', fontSize: 12, fontWeight: 500,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          }}
-        >
-          💡 解答
-        </button>
-      )}
-
-      {user && selected && (
-        <AnnotationModal
-          open={annoOpen}
-          onClose={() => setAnnoOpen(false)}
-          nodeId={selected}
-          nodeTitle={node?.title || ''}
-          anchorText={anchorText}
-          onSaved={refreshAnnotations}
-          userRole={user.role}
-        />
-      )}
-
-      {user && selected && noteOpen && (
-        <FloatButton.Group shape="circle" style={{ right: 24, bottom: 24 }}>
-          <FloatButton icon={<span>📝</span>} tooltip="写个人笔记" onClick={() => {
-            api.get(`/notes?nodeId=${selected}`).then(r => setNoteText(r.data.note || ''));
-            setNoteModalOpen(true);
-          }} />
-        </FloatButton.Group>
-      )}
-
-      <Modal
-        open={noteModalOpen} onCancel={() => setNoteModalOpen(false)}
-        title={`📝 我的笔记 · ${node?.title || ''}`}
-        onOk={async () => {
-          await api.put('/notes', { nodeId: selected, content: noteText });
-          message.success('笔记已保存');
-          setNoteModalOpen(false);
-        }}
-      >
-        <Input.TextArea rows={8} value={noteText} onChange={e => setNoteText(e.target.value)} />
-      </Modal>
+      <KnowledgeDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        nodeId={selected || ''}
+        nodeData={node}
+        level={selected ? (progress[selected] || 0) : 0}
+        onLevelChange={user ? setLevel : undefined}
+        linkedNodes={linkedNodes}
+        isLoggedIn={!!user}
+        userRole={user?.role}
+        annotations={annotations}
+        onAnnotationSaved={() => setAnnKey(k => k + 1)}
+      />
 
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%' }}><Spin size="large" /></div>}
     </div>
