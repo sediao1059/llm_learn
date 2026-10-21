@@ -263,6 +263,67 @@ const ANNOTATION_SYSTEM = `你是「LLM 学习知识图谱」的划词解读助�
 - 顺带把术语翻译成大白话；可补充与该笔记主题直接相关的背景，但不要跑题；
 - 控制在 300 字以内，宁短勿长；只输出注释正文，不要客套开场白。`;
 
+/* ---------- 注册默认个人学习路线（模板生成，不调 LLM：注册必须秒级可靠） ---------- */
+
+const FOCUS_TAG_MAP = {
+  rag: ['RAG', '检索', '向量', 'Embedding'],
+  agent: ['Agent', '智能体', 'MCP', 'Function'],
+  train: ['微调', '训练', 'RLHF', 'LoRA'],
+  infra: ['部署', '推理', '量化', 'vLLM']
+};
+
+/** 按画像生成默认路线树：新手=打底线+入门应用；老手=应用+训练部署；focus 追加方向阶段 */
+export function buildDefaultRoute(profileTags, bundle) {
+  const nodes = (bundle && bundle.nodes) || [];
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const item = n => ({ title: n.title, refId: n.id, why: '', children: [] });
+  const pick = ids => ids.map(id => byId.get(id)).filter(Boolean).map(item);
+  const expert = profileTags && profileTags.level === 'expert';
+  const stages = [];
+
+  if (!expert) {
+    const base = nodes
+      .filter(n => String(n.path || '').startsWith('1.'))
+      .sort((a, b) => Number(String(a.path).split('.')[1] || 0) - Number(String(b.path).split('.')[1] || 0))
+      .slice(0, 8)
+      .map(item);
+    stages.push({ title: '阶段一 · 打好基础', goal: '按打底线把地基打牢', items: base.length ? base : pick(['pytorch-basics', 'transformer-architecture', 'prompt-engineering']) });
+    stages.push({
+      title: '阶段二 · 入门应用', goal: '学会用大模型干活',
+      items: pick(['rag-vector-kb', 'function-call', 'structured-output', 'hallucination-mitigation'])
+    });
+  } else {
+    stages.push({
+      title: '阶段一 · 应用开发', goal: '生产级 RAG 与工具编排',
+      items: pick(['prompt-engineering', 'rag-vector-kb', 'rerank-models', 'agentic-rag', 'function-call', 'mcp-protocol'])
+    });
+    stages.push({
+      title: '阶段二 · 训练与部署', goal: '动得了模型本身',
+      items: pick(['llm-finetuning', 'rlhf-dpo', 'vllm-deployment', 'llm-quantization'])
+    });
+  }
+
+  const focusItems = [];
+  const seen = new Set(stages.flatMap(st => st.items.map(it => it.refId)));
+  for (const f of (profileTags && profileTags.focus) || []) {
+    const keys = FOCUS_TAG_MAP[f] || [f.toUpperCase()];
+    nodes.filter(n => !seen.has(n.id) && (n.tags || []).some(t => keys.some(k => String(t).includes(k))))
+      .slice(0, 4)
+      .forEach(n => { seen.add(n.id); focusItems.push(item(n)); });
+  }
+  if (focusItems.length) {
+    stages.push({ title: '阶段三 · 我关注的方向', goal: '按你的方向偏好深入', items: focusItems });
+  }
+
+  return {
+    title: '我的默认学习路线',
+    summary: expert
+      ? '根据你的老手画像生成的默认路线——可在「学习路线」页删除，或让 AI 重新定制'
+      : '根据你的新手画像生成的入门路线——可在「学习路线」页删除，或让 AI 定制专属路线',
+    stages
+  };
+}
+
 /* ---------- 贡献值（activity 流水：热力图与未来排行榜的数据源） ---------- */
 export const CONTRIBUTION_POINTS = { uploadItem: 8, submission: 5, annotation: 2 };
 

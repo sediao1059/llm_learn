@@ -17,7 +17,7 @@ import { extname, join, dirname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { initDb, dbInfo, CORE_DDL, normalizeProfileTags, parseProfileTags } from './db.mjs';
-import { initAi, handleAiApi } from './ai.mjs';
+import { initAi, handleAiApi, buildDefaultRoute } from './ai.mjs';
 import { initAdmin, handleAdminApi } from './admin.mjs';
 import { initTiers, getTiers, assignTierForNewNode } from './tiers.mjs';
 import { initKnowledge, getBundleGz, getBundleObj, getOfflineHtml } from './knowledge.mjs';
@@ -49,7 +49,10 @@ await ensureColumns('users', {
   role: "role VARCHAR(10) NOT NULL DEFAULT 'user'",
   status: "status VARCHAR(10) NOT NULL DEFAULT 'enabled'",
   invite_code_id: 'invite_code_id INT',
-  profile_tags: "profile_tags VARCHAR(1000) NOT NULL DEFAULT ''"
+  profile_tags: "profile_tags VARCHAR(1000) NOT NULL DEFAULT ''",
+  nickname: "nickname VARCHAR(60) NOT NULL DEFAULT ''",
+  phone: "phone VARCHAR(20) NOT NULL DEFAULT ''",
+  email: "email VARCHAR(120) NOT NULL DEFAULT ''"
 });
 
 /* 引导规则：系统还没有管理员时，把最早注册的用户提为管理员（保证旧库升级后所有者即管理员） */
@@ -76,6 +79,22 @@ await initTiers(db);
 
 /* 热门推荐统计（每晚 03:40：浏览足迹 → 高频标签与推荐文章） */
 await initHot(db);
+
+/* 存量用户回填默认个人学习路线（幂等：已有非官方路线的用户跳过） */
+async function backfillDefaultRoutes() {
+  const users = await db.prepare('SELECT username, profile_tags FROM users').all();
+  let created = 0;
+  for (const u of users) {
+    const has = await db.prepare('SELECT id FROM learning_paths WHERE created_by = ? AND is_official = 0 LIMIT 1').get(u.username);
+    if (has) continue;
+    const tree = buildDefaultRoute(parseProfileTags(u.profile_tags), await getBundleObj());
+    await db.prepare('INSERT INTO learning_paths(title, goal, tree, created_by) VALUES (?, ?, ?, ?)')
+      .run('我的默认学习路线', '注册时按画像自动生成，可删除', JSON.stringify(tree), u.username);
+    created++;
+  }
+  if (created) console.log(`🗺 已为 ${created} 位存量用户补生成默认学习路线`);
+}
+await backfillDefaultRoutes();
 
 /* ---------- 工具 ---------- */
 function json(res, status, data) {
@@ -127,7 +146,7 @@ async function currentUser(req) {
   const m = String(req.headers['authorization'] || '').match(/^Bearer (\S+)$/);
   if (!m) return null;
   const row = await db.prepare(`
-    SELECT u.id, u.username, u.role, u.status, u.profile_tags, s.token, s.expires_at
+    SELECT u.id, u.username, u.nickname, u.phone, u.email, u.role, u.status, u.profile_tags, s.token, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
   `).get(m[1]);
@@ -172,15 +191,27 @@ async function handleApi(req, res, url) {
     // 系统还没有管理员时，注册者自动成为首个管理员（引导规则）
     const role = hasAdmin ? 'user' : 'admin';
     const profile = normalizeProfileTags({ level: body.level, focus: body.focus });
+    const nickname = String(body.nickname || '').trim().slice(0, 60);
+    const phone = String(body.phone || '').trim();
+    const email = String(body.email || '').trim().slice(0, 120);
+    if (phone && !/^1\d{10}$/.test(phone)) return json(res, 400, { error: '手机号格式不对（11 位数字）' });
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(res, 400, { error: '邮箱格式不正确' });
     const salt = randomBytes(16).toString('hex');
     try {
-      const r = await db.prepare('INSERT INTO users(username, password_hash, salt, role, invite_code_id, profile_tags) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(username, hashPassword(password, salt), salt, role, inviteCodeId, JSON.stringify(profile));
+      const r = await db.prepare('INSERT INTO users(username, password_hash, salt, role, invite_code_id, profile_tags, nickname, phone, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(username, hashPassword(password, salt), salt, role, inviteCodeId, JSON.stringify(profile), nickname, phone, email);
       if (inviteCodeId) {
         await db.prepare('UPDATE invite_codes SET use_count = use_count + 1 WHERE id = ?').run(inviteCodeId);
       }
+      // 注册即生成一条按画像定制的默认个人学习路线（模板生成不调 LLM，可在路线页删除）
+      try {
+        const bundle = await getBundleObj();
+        const tree = buildDefaultRoute(profile, bundle);
+        await db.prepare('INSERT INTO learning_paths(title, goal, tree, created_by) VALUES (?, ?, ?, ?)')
+          .run('我的默认学习路线', '注册时按画像自动生成，可删除', JSON.stringify(tree), username);
+      } catch (e) { /* 路线生成失败不影响注册 */ }
       const token = await createSession(Number(r.lastInsertRowid));
-      return json(res, 200, { token, username, role, profileTags: profile });
+      return json(res, 200, { token, username, nickname, role, profileTags: profile });
     } catch (e) {
       if (isDuplicateError(e)) return json(res, 409, { error: '用户名已被注册' });
       throw e;
@@ -190,14 +221,14 @@ async function handleApi(req, res, url) {
   // 登录
   if (route === 'POST /api/auth/login') {
     const body = await readBody(req);
-    const user = await db.prepare('SELECT id, username, password_hash, salt, role, status, profile_tags FROM users WHERE username = ?')
+    const user = await db.prepare('SELECT id, username, nickname, password_hash, salt, role, status, profile_tags FROM users WHERE username = ?')
       .get(String(body.username || '').trim());
     if (!user || !verifyPassword(String(body.password || ''), user.salt, user.password_hash)) {
       return json(res, 401, { error: '用户名或密码错误' });
     }
     if (user.status !== 'enabled') return json(res, 403, { error: '账号已被禁用，请联系管理员' });
     const token = await createSession(user.id);
-    return json(res, 200, { token, username: user.username, role: user.role, profileTags: parseProfileTags(user.profile_tags) });
+    return json(res, 200, { token, username: user.username, nickname: user.nickname || '', role: user.role, profileTags: parseProfileTags(user.profile_tags) });
   }
 
   // 图谱分层（大纲视图数据）：公开只读，未登录的游客也能看首页大纲
@@ -250,15 +281,24 @@ async function handleApi(req, res, url) {
   }
 
   if (route === 'GET /api/auth/me') {
-    return json(res, 200, { username: me.username, role: me.role, profileTags: me.profileTags });
+    return json(res, 200, {
+      username: me.username, nickname: me.nickname || '', phone: me.phone || '', email: me.email || '',
+      role: me.role, profileTags: me.profileTags
+    });
   }
 
-  // 个人中心：修改自己的用户画像（新手/老手 + 方向偏好）
+  // 个人中心：修改自己的画像（新手/老手 + 方向偏好）与资料（昵称/手机/邮箱）
   if (route === 'PUT /api/auth/profile') {
     const body = await readBody(req);
     const profile = normalizeProfileTags({ level: body.level, focus: body.focus });
-    await db.prepare('UPDATE users SET profile_tags = ? WHERE id = ?').run(JSON.stringify(profile), me.id);
-    return json(res, 200, { profileTags: profile });
+    const nickname = body.nickname !== undefined ? String(body.nickname || '').trim().slice(0, 60) : (me.nickname || '');
+    const phone = body.phone !== undefined ? String(body.phone || '').trim() : (me.phone || '');
+    const email = body.email !== undefined ? String(body.email || '').trim().slice(0, 120) : (me.email || '');
+    if (phone && !/^1\d{10}$/.test(phone)) return json(res, 400, { error: '手机号格式不对（11 位数字）' });
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(res, 400, { error: '邮箱格式不正确' });
+    await db.prepare('UPDATE users SET profile_tags = ?, nickname = ?, phone = ?, email = ? WHERE id = ?')
+      .run(JSON.stringify(profile), nickname, phone, email, me.id);
+    return json(res, 200, { profileTags: profile, nickname, phone, email });
   }
 
   if (route === 'POST /api/auth/logout') {

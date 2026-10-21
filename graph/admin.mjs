@@ -133,13 +133,14 @@ export async function handleAdminApi({ req, res, url, me, json, readBody }) {
 
   if (route === 'GET /api/admin/users') {
     const rows = await db.prepare(`
-      SELECT u.id, u.username, u.role, u.status, u.created_at, u.profile_tags, u.invite_code_id, i.code AS invite_code
+      SELECT u.id, u.username, u.nickname, u.phone, u.email, u.role, u.status, u.created_at, u.profile_tags, u.invite_code_id, i.code AS invite_code
       FROM users u LEFT JOIN invite_codes i ON i.id = u.invite_code_id
       ORDER BY u.id
     `).all();
     return json(res, 200, {
       users: rows.map(r => ({
         id: r.id, username: r.username, role: r.role, status: r.status,
+        nickname: r.nickname || '', phone: r.phone || '', email: r.email || '',
         createdAt: r.created_at, inviteCode: r.invite_code || '', profileTags: parseProfileTags(r.profile_tags)
       }))
     });

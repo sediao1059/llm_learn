@@ -123,6 +123,9 @@ export const CORE_DDL = `
     role          VARCHAR(10) NOT NULL DEFAULT 'user',
     status        VARCHAR(10) NOT NULL DEFAULT 'enabled',
     invite_code_id INT,
+    nickname      VARCHAR(60) NOT NULL DEFAULT '',
+    phone         VARCHAR(20) NOT NULL DEFAULT '',
+    email         VARCHAR(120) NOT NULL DEFAULT '',
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   CREATE TABLE IF NOT EXISTS sessions (
