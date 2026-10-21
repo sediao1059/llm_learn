@@ -5,11 +5,14 @@
 node_modules/
 npm-debug.log*
 
-# 本地数据库（学习进度/用户，不入库）
+# 本地数据库（旧 SQLite，不入库；历史数据可用 npm run migrate-sqlite 迁入 MySQL）
 graph/data/app.db*
 graph/data/*.db-journal
 graph/data/*.db-shm
 graph/data/*.db-wal
+
+# 数据库真实连接配置（占位 db.json 提交，本地真实配置不入库）
+graph/config/db.local.json
 
 # ZCode 会话目录
 .zcode/
