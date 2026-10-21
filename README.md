@@ -36,6 +36,12 @@ llm_learn/
 - dev / prod 目前共用本地实例 127.0.0.1:3306（库 `llm_learn`）；部署服务器时改 prod 节即可
 - 首次启动/构建会自动建库建表；旧 SQLite（graph/data/app.db）数据用 `cd graph && npm run migrate-sqlite` 一次性迁入（每表目标非空自动跳过，可重复执行）
 
+## 前端组件化（2026-10-20）
+
+- **Vue3 + Element Plus**（CDN 引入，零构建零 npm）：paths / upload / admin 三页整页 Vue 重写；index 混合——图谱/面板/助手原生 JS + ui-shell Vue 承载对话框（登录注册/个人中心/足迹/收藏/沉淀中心/使用说明）与右下角悬浮操作按钮（📊 程度 / 📝 笔记）
+- **用户资料**：注册可填昵称/手机/邮箱；「⚙ 我的」随时修改（昵称优先展示）；注册自动生成按画像定制的默认学习路线（可删除）
+- `graph/rename-user.mjs <旧名> <新名> [新密码]`：通用改名改密工具（事务同步全部冗余字段）
+
 ## 如何新增一个学习点（三步）
 
 1. **写笔记**：在 `notes/<分类目录>/` 下新建 `xxx.md`，文件头带上 frontmatter（模板见下）。

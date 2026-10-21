@@ -125,6 +125,7 @@
 - **对话式迭代**：对已生成/已加载的路线继续提调整要求（带 pathId + feedback），AI 输出调整后的完整路线。
 - 主题尽量复用已有知识点（refId 校验，非法置空）；带 refId 的条目显示知识点 chip，点击跳回图谱首页并自动打开该笔记（`index.html?node=`）。
 - 满意后可保存（learning_paths 表，含标题/目标/树 JSON），左侧列表可随时打开继续迭代或删除。
+- **注册默认个人路线（2026-10-20 第十批）**：注册时按画像模板自动生成「我的默认学习路线」（不调 LLM、秒级可靠；新手=打底线+入门应用、老手=应用+训练部署、focus 追加方向阶段），created_by=用户、可删除；存量用户启动幂等回填。
 - **官方预置路线（2026-10-20 第八批）**：learning_paths 增加 `is_official` 标志——官方路线在学习路线页**置顶 + ⭐ 徽章，可直接选择学习**（无需和 AI 对话）；删除权限收紧（官方路线仅管理员可删、普通路线仅创建者或管理员可删，修复原先任何人可删任何路线的问题）。
 - **从链接导入官方路线（管理页「学习路线」页签）**：粘贴一篇讲学习路线/资源的文章链接 → 后台任务：两级抓取正文 → LLM 转成阶段化路线树 → **文章涉及但图谱没有的主题自动创建为 todo 型待学节点**（进图谱与标签筛选，即"涉及知识点补充进来"）→ 存为官方路线；可设/取消官方、删除。
 - **官方种子**：`npm run seed-paths`（幂等）——3 条官方路线（🌱 入门全景线 / 🛠️ 应用开发线 / 🏋️ 训练微调线）+ 5 个资源型待学节点（huggingface / kaggle / langchain / lora / arxiv，参考学习资源推荐文章补种）。
@@ -179,13 +180,14 @@
 2. **数据库 MySQL**：连接配置 `graph/config/db.json`（空值占位，提交 git）+ `graph/config/db.local.json`（真实值，**不提交 git**）；`DB_ENV`（dev/prod，默认 dev）选节，环境变量 `DB_*` 优先；启动自动 `CREATE DATABASE IF NOT EXISTS`。路由风格：`server.mjs` 统一分发（`/api/llm/`、`/api/ai/` 转发 ai.mjs；`/api/admin/` 经管理员校验转发 admin.mjs；知识下发与分层由 knowledge.mjs / tiers.mjs 承担），裸 SQL + 占位符参数；新表一律 `CREATE TABLE IF NOT EXISTS` 随启动/同步自动建（无迁移机制，存量表加列用 information_schema 检测的幂等 ALTER）。旧 SQLite 数据用 `npm run migrate-sqlite` 一次性迁入。
 3. LLM 调用统一走 `graph/llm.mjs`，不得在别处手写 HTTP 调模型。
 4. 前端无构建/无模块系统：新功能 JS 放独立 `<script>` 文件（经 boot.js 按序加载），与 app.js 通过 `window.KG_APP` 桥通信；改动后 `node --check` 验证语法。
-5. 拼 HTML 一律过 `esc()` 转义；样式沿用 `style.css :root` 浅色主题 token（知乎风格：白卡片 + `#f6f6f6` 底 + 知乎蓝 `#056de8`），不自造配色。
+5. 前端组件库：Vue3 + Element Plus（CDN 引入零构建）——paths/upload/admin 整页 Vue、index 混合（图谱/面板/助手原生 + ui-shell Vue 对话框）；拼 HTML 一律过 `esc()` 转义；图谱区配色沿用浅色主题 token。
 6. 文案、注释、文档全部中文。
 
 ## 6. 变更记录
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-20 | 第十批：前端组件化——引入 Vue3 + Element Plus（CDN，仍零构建零 npm），paths/upload/admin 三页整页重写、index 混合改造（ui-shell 承载对话框 + 右下角悬浮程度/笔记按钮）；users 加 nickname/phone/email（注册+个人中心可编辑，昵称优先展示）；注册自动生成按画像定制的默认个人学习路线（模板生成不调 LLM，存量用户启动回填）；rename-user.mjs 通用改名改密工具（事务同步全部冗余用户名字段） |
 | 2026-10-20 | 第九批：热门推荐（每晚 03:40 统计足迹，单人单篇 1 票、>10 上榜，首页 🔥 条 + 公开 /api/hot）；定时任务中心（jobs 注册表 + 管理页页签可手动触发）；知识点收藏与个人笔记（favorites/node_notes 表 + ⭐ 按钮/⭐ 收藏弹窗/📝 笔记区块）；新增 §4.15/§4.16 |
 | 2026-10-20 | 第八批：官方学习路线——is_official 标志与置顶呈现、路线删除权限收紧；管理页「学习路线」页签支持从文章链接一键导入（自动把缺失主题建为待学节点）；seed-paths 官方种子（3 条路线 + 5 个资源节点）；§4.10 增补 |
 | 2026-10-20 | 第七批：上传知识（upload.html 链接/文本双模式，AI 拆解+检索标签+专栏建议，链接抓取直连+渲染代理两级降级）+ 专栏机制（col- 节点聚合成员文章，图谱只留专栏）+ 贡献体系（activity 流水、+8/+5/+2 计分、90 天热力日历，排行榜留待后续）；新增 §4.13/§4.14 |
