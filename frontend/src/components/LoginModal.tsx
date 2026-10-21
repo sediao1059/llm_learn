@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Modal, Tabs, Form, Input, Button, Radio, message } from 'antd';
 import { useAuth } from '../store/auth';
 
-export default function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function LoginModal({
+  open, onClose, onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState('login');
   const [loading, setLoading] = useState(false);
@@ -17,6 +23,7 @@ export default function LoginModal({ open, onClose }: { open: boolean; onClose: 
       }
       message.success(mode === 'login' ? '登录成功' : '注册成功');
       onClose();
+      onSuccess?.();
     } catch (e: any) {
       message.error(e?.response?.data?.message || e?.response?.data?.error || '操作失败');
     } finally {

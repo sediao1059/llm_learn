@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, Tag, Space, Tooltip } from 'antd';
+import { Layout, Menu, Button, Tag, Space, Tooltip, message } from 'antd';
 import { useAuth } from '../store/auth';
 import LoginModal from './LoginModal';
 import ProfileModal from './ProfileModal';
 import ChangelogDrawer from './ChangelogDrawer';
 
 const { Header, Content } = Layout;
+
+/** 需要登录才能访问的路径 */
+const AUTH_REQUIRED = ['/paths', '/upload'];
 
 export default function AppLayout() {
   const nav = useNavigate();
@@ -16,6 +19,7 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [version, setVersion] = useState('');
+  const pendingNav = useRef<string | null>(null);
 
   useEffect(() => { refresh(); }, []);
   useEffect(() => {
@@ -24,6 +28,25 @@ export default function AppLayout() {
       .then(d => setVersion(d.version || ''))
       .catch(() => {});
   }, []);
+
+  const onNavClick = ({ key }: { key: string }) => {
+    if (AUTH_REQUIRED.includes(key) && !user) {
+      pendingNav.current = key;
+      setLoginOpen(true);
+      message.info('请先登录后使用该功能');
+      return;
+    }
+    nav(key);
+  };
+
+  const onLoginSuccess = () => {
+    setLoginOpen(false);
+    if (pendingNav.current) {
+      const target = pendingNav.current;
+      pendingNav.current = null;
+      nav(target);
+    }
+  };
 
   const items = [
     { key: '/', label: '🧠 知识图谱' },
@@ -41,7 +64,7 @@ export default function AppLayout() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Menu
             mode="horizontal" selectedKeys={[loc.pathname]} items={items}
-            onClick={({ key }) => nav(key)}
+            onClick={onNavClick}
             style={{ borderBottom: 'none', background: 'transparent' }}
           />
           {version && (
@@ -76,7 +99,7 @@ export default function AppLayout() {
       </Header>
       <Content><Outlet /></Content>
 
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={onLoginSuccess} />
       {user && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />}
       <ChangelogDrawer open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </Layout>

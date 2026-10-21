@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Card, Tag, Button, Drawer, Empty, Spin, Tooltip, FloatButton, Modal, Input, message, List } from 'antd';
+import { Card, Tag, Button, Drawer, Empty, Spin, FloatButton, Modal, Input, message } from 'antd';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/auth';
 import AnnotationModal from './AnnotationModal';
+import MarkdownContent from '../../components/MarkdownContent';
 
 interface KnowledgeData {
   nodes: any[]; edges: any[]; categories: string[]; layers: string[];
@@ -21,6 +22,7 @@ export default function GraphPage() {
   const { user } = useAuth();
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
 
   // 划词注释
   const [annoOpen, setAnnoOpen] = useState(false);
@@ -34,7 +36,6 @@ export default function GraphPage() {
     if (user) api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
   }, [user]);
 
-  // 加载注释
   useEffect(() => {
     if (selected && user) {
       api.get(`/ai/annotations?nodeId=${selected}`).then(r => {
@@ -119,7 +120,6 @@ export default function GraphPage() {
     setSelectionPos({ x: rect.left + rect.width / 2, y: rect.top - 8 });
   }, [user, noteOpen]);
 
-  // 全局点击关闭浮动按钮
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -141,15 +141,14 @@ export default function GraphPage() {
     <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
       <div ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
 
-      {/* 笔记 Drawer */}
       <Drawer
         open={noteOpen && !!selected}
         onClose={() => { setNoteOpen(false); setSelected(null); }}
-        width={480} title={node?.title || ''}
+        width={500} title={node?.title || ''}
         destroyOnClose
       >
         {node ? (
-          <div ref={drawerBodyRef} onMouseUp={handleMouseUp}>
+          <div ref={drawerBodyRef} onMouseUp={handleMouseUp} style={{ userSelect: 'text' }}>
             <div style={{ marginBottom: 8 }}>
               <Tag color="blue">{node.layer || '未分层'}</Tag>
               <Tag color="geekblue">{node.category}</Tag>
@@ -163,12 +162,8 @@ export default function GraphPage() {
             {node.tags?.length > 0 && (
               <div style={{ marginBottom: 12 }}>{node.tags.map((t: string) => <Tag key={t}>#{t}</Tag>)}</div>
             )}
-            <div
-              style={{ lineHeight: 1.8, fontSize: 14 }}
-              dangerouslySetInnerHTML={{ __html: node.content || '（暂无内容）' }}
-            />
+            <MarkdownContent content={node.content || ''} />
 
-            {/* 注释列表 */}
             {annotations.length > 0 && (
               <Card title={`💬 本篇注释（${annotations.length}）`} size="small" style={{ marginTop: 16 }}>
                 {annotations.map((a: any) => (
@@ -180,8 +175,8 @@ export default function GraphPage() {
                       </Tag>
                       <span style={{ fontSize: 11, color: '#bfbfbf', marginLeft: 'auto' }}>{a.createdBy}</span>
                     </div>
-                    {a.anchorText && <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>「{a.anchorText.slice(0, 50)}…」</div>}
-                    <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>{a.answer?.slice(0, 300)}</div>
+                    {a.anchorText && <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 4 }}>「{a.anchorText.slice(0, 50)}…」</div>}
+                    <MarkdownContent content={a.answer || ''} fontSize={12.5} />
                   </div>
                 ))}
               </Card>
@@ -190,7 +185,6 @@ export default function GraphPage() {
         ) : <Empty description="点击左侧节点查看笔记" />}
       </Drawer>
 
-      {/* 浮动"解答"按钮（选区上方） */}
       {selectionPos && (
         <button
           className="anno-float-btn"
@@ -201,16 +195,12 @@ export default function GraphPage() {
             background: '#1677ff', color: '#fff', border: 'none',
             cursor: 'pointer', fontSize: 12, fontWeight: 500,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            transition: 'all 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)'; }}
-          onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
         >
           💡 解答
         </button>
       )}
 
-      {/* 划词注释弹窗 */}
       {user && selected && (
         <AnnotationModal
           open={annoOpen}
@@ -223,27 +213,22 @@ export default function GraphPage() {
         />
       )}
 
-      {/* 悬浮操作按钮 */}
       {user && selected && noteOpen && (
         <FloatButton.Group shape="circle" style={{ right: 24, bottom: 24 }}>
-          <FloatButton icon={<span>📊</span>} tooltip="标注学习程度" onClick={() => {
-            // TODO: level modal
-          }} />
           <FloatButton icon={<span>📝</span>} tooltip="写个人笔记" onClick={() => {
             api.get(`/notes?nodeId=${selected}`).then(r => setNoteText(r.data.note || ''));
-            setNoteOpen(true);
+            setNoteModalOpen(true);
           }} />
         </FloatButton.Group>
       )}
 
-      {/* 个人笔记 Modal */}
       <Modal
-        open={false} onCancel={() => setNoteOpen(false)}
+        open={noteModalOpen} onCancel={() => setNoteModalOpen(false)}
         title={`📝 我的笔记 · ${node?.title || ''}`}
         onOk={async () => {
           await api.put('/notes', { nodeId: selected, content: noteText });
           message.success('笔记已保存');
-          setNoteOpen(false);
+          setNoteModalOpen(false);
         }}
       >
         <Input.TextArea rows={8} value={noteText} onChange={e => setNoteText(e.target.value)} />
