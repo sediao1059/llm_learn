@@ -1,210 +1,149 @@
-/* global KG_PAGE */
-/* AI 学习路线页：对话式生成 + 追问调整 + 保存管理
- * 流程：输入目标 → POST /ai/paths/generate 返回路线树 → 渲染 → 可继续提要求（pathId + feedback）迭代 → 满意后保存 */
+/* AI 学习路线页（Vue3 + Element Plus）：对话式生成 + 追问调整 + 保存管理 */
 (function () {
   'use strict';
-  if (!window.KG_PAGE) return;
-  var api = KG_PAGE.api, esc = KG_PAGE.esc, toast = KG_PAGE.toast;
+  var E = window.KG_EP;
 
-  var chatEl = document.getElementById('paths-chat');
-  var inputEl = document.getElementById('path-input');
-  var sendBtn = document.getElementById('path-send');
-  var listEl = document.getElementById('paths-list');
+  // 递归组件：路线条目（含子主题）
+  var RouteItems = {
+    props: ['items', 'titles'],
+    template:
+      '<div>' +
+      '  <div v-for="it in items" :key="it.title">' +
+      '    <div class="path-item-row">' +
+      '      <b>{{ it.title }}</b>' +
+      '      <a v-if="it.refId && titles[it.refId]" :href="\'index.html?node=\' + encodeURIComponent(it.refId)" target="_blank">' +
+      '        <el-tag size="small" type="success" style="cursor:pointer">🔗 {{ titles[it.refId] }} ↗</el-tag>' +
+      '      </a>' +
+      '      <el-tag v-else size="small" type="info">新主题</el-tag>' +
+      '      <span v-if="it.why" style="color:#999;font-size:12px">{{ it.why }}</span>' +
+      '    </div>' +
+      '    <div v-if="it.children && it.children.length" class="path-children">' +
+      '      <route-items :items="it.children" :titles="titles"></route-items>' +
+      '    </div>' +
+      '  </div>' +
+      '</div>'
+  };
+  RouteItems.components = { RouteItems: RouteItems };
 
-  var currentTree = null;   // 当前路线草稿（最新一次生成/加载的结果）
-  var currentPathId = null; // 正在迭代的已保存路线 id（后续追问会带 pathId）
-  var lastGoal = '';        // 最近一次目标（保存时记录）
-  var generating = false;
+  var app = Vue.createApp({
+    setup: function () {
+      var state = E.state;
+      var paths = Vue.ref([]);
+      var titles = Vue.ref({});
+      var messages = Vue.ref([]);
+      var input = Vue.ref('');
+      var generating = Vue.ref(false);
+      var currentPathId = Vue.ref(null);
+      var currentTree = Vue.ref(null);
+      var lastGoal = Vue.ref('');
+      var saveVisible = Vue.ref(false);
+      var saveTitle = Vue.ref('');
+      var savingTree = null;
+      var chatEl = Vue.ref(null);
 
-  // refId → 标题（启动时从 bundle.json 拉取；AI 节点标题拿不到就显示 id）
-  var staticTitles = {};
-  function refTitle(id) { return staticTitles[id] || id; }
+      function shortTime(t) { return String(t || '').slice(5, 16); }
+      function goHome() { location.href = 'index.html'; }
+      function logout() { E.logout(); }
 
-  /* ---------- 聊天区 ---------- */
-  function clearEmptyHint() {
-    var hint = chatEl.querySelector('.paths-empty-hint');
-    if (hint) hint.remove();
-  }
+      function loadList() {
+        return E.api('GET', '/ai/paths').then(function (r) {
+          if (r.ok) paths.value = r.data.paths || [];
+        }).catch(function () { E.toast('无法连接服务', 'error'); });
+      }
 
-  function appendUser(text) {
-    clearEmptyHint();
-    var div = document.createElement('div');
-    div.className = 'msg user';
-    div.innerHTML = '<div class="bubble"></div>';
-    div.querySelector('.bubble').textContent = text;
-    chatEl.appendChild(div);
-    chatEl.scrollTop = chatEl.scrollHeight;
-  }
+      function scrollBottom() {
+        Vue.nextTick(function () {
+          if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight;
+        });
+      }
 
-  function appendLoading() {
-    clearEmptyHint();
-    var div = document.createElement('div');
-    div.className = 'msg assistant';
-    div.innerHTML = '<div class="bubble"><span class="typing">▋</span> AI 正在结合知识图谱规划路线…（可能需要半分钟）</div>';
-    chatEl.appendChild(div);
-    chatEl.scrollTop = chatEl.scrollHeight;
-    return div;
-  }
+      function send() {
+        if (generating.value) return;
+        var text = input.value.trim();
+        if (!text) return;
+        if (!currentTree.value) lastGoal.value = text;
+        input.value = '';
+        messages.value.push({ role: 'user', content: text });
+        messages.value.push({ role: 'assistant', loading: true });
+        scrollBottom();
+        generating.value = true;
+        var payload = (currentPathId.value && currentTree.value)
+          ? { pathId: currentPathId.value, feedback: text }
+          : { goal: text };
+        E.api('POST', '/ai/paths/generate', payload).then(function (r) {
+          generating.value = false;
+          messages.value.pop();
+          if (!r.ok) {
+            messages.value.push({ role: 'assistant', error: (r.data && r.data.error) || ('HTTP ' + r.status) });
+            return;
+          }
+          currentTree.value = r.data.tree;
+          messages.value.push({ role: 'assistant', tree: r.data.tree });
+          scrollBottom();
+        }).catch(function () {
+          generating.value = false;
+          messages.value.pop();
+          messages.value.push({ role: 'assistant', error: '无法连接服务，请确认已启动（npm start）' });
+        });
+      }
 
-  function appendError(text) {
-    var div = document.createElement('div');
-    div.className = 'msg assistant';
-    div.innerHTML = '<div class="msg-error">⚠ ' + esc(text) + '</div>';
-    chatEl.appendChild(div);
-    chatEl.scrollTop = chatEl.scrollHeight;
-  }
+      function openSave(tree) {
+        savingTree = tree;
+        saveTitle.value = tree.title || '我的学习路线';
+        saveVisible.value = true;
+      }
 
-  /* ---------- 路线树渲染 ---------- */
-  function itemsHtml(items) {
-    return items.map(function (it) {
-      var ref = it.refId
-        ? '<a class="chip path-ref" href="index.html?node=' + encodeURIComponent(it.refId) +
-          '" title="回知识图谱打开这篇笔记：' + esc(refTitle(it.refId)) + '">' + esc(refTitle(it.refId)) + ' ↗</a>'
-        : '<span class="chip path-new" title="图谱里还没有这个知识点，是路线新规划的主题">新主题</span>';
-      var kids = (it.children || []).length ? '<ul class="path-items">' + itemsHtml(it.children) + '</ul>' : '';
-      return '<li><div class="path-item"><b>' + esc(it.title) + '</b>' + ref +
-        (it.why ? '<span class="muted path-why">' + esc(it.why) + '</span>' : '') + '</div>' + kids + '</li>';
-    }).join('');
-  }
-
-  function treeHtml(t, saved) {
-    var stages = (t.stages || []).map(function (st, i) {
-      return '<details class="path-stage" open>' +
-        '<summary><b>阶段 ' + (i + 1) + ' · ' + esc(st.title) + '</b>' +
-        (st.goal ? '<span class="muted"> —— ' + esc(st.goal) + '</span>' : '') + '</summary>' +
-        '<ul class="path-items">' + itemsHtml(st.items || []) + '</ul></details>';
-    }).join('');
-    return '<div class="path-card">' +
-      '<div class="path-card-head"><div class="path-card-title">' + esc(t.title) + '</div>' +
-      (saved ? '' : '<button class="btn small primary path-save" title="保存后随时可以在左侧列表重新打开">💾 保存这条路线</button>') +
-      '</div>' +
-      (t.summary ? '<div class="muted" style="margin:6px 0 2px">' + esc(t.summary) + '</div>' : '') +
-      stages +
-      '</div>';
-  }
-
-  function appendTree(t, saved) {
-    var div = document.createElement('div');
-    div.className = 'msg assistant';
-    div.innerHTML = treeHtml(t, saved);
-    var saveBtn = div.querySelector('.path-save');
-    if (saveBtn) saveBtn.addEventListener('click', function () { savePath(); });
-    chatEl.appendChild(div);
-    chatEl.scrollTop = chatEl.scrollHeight;
-  }
-
-  /* ---------- 生成 / 迭代 ---------- */
-  function send() {
-    if (generating) return;
-    var text = inputEl.value.trim();
-    if (!text) return;
-    if (!currentTree) lastGoal = text;
-    inputEl.value = '';
-    inputEl.style.height = 'auto';
-    appendUser(text);
-    var loading = appendLoading();
-    generating = true;
-    sendBtn.disabled = true;
-
-    var payload = currentPathId && currentTree
-      ? { pathId: currentPathId, feedback: text }
-      : { goal: text };
-    api('POST', '/ai/paths/generate', payload).then(function (r) {
-      generating = false;
-      sendBtn.disabled = false;
-      loading.remove();
-      if (!r.ok) return appendError((r.data && r.data.error) || ('HTTP ' + r.status));
-      currentTree = r.data.tree;
-      appendTree(currentTree, false);
-    }).catch(function () {
-      generating = false;
-      sendBtn.disabled = false;
-      loading.remove();
-      appendError('无法连接服务，请确认已启动（npm start）');
-    });
-  }
-
-  inputEl.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-  inputEl.addEventListener('input', function () {
-    inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
-  });
-  sendBtn.addEventListener('click', send);
-
-  function savePath() {
-    if (!currentTree) return;
-    var title = prompt('给这条路线起个名字：', currentTree.title || '我的学习路线');
-    if (title === null) return;
-    title = title.trim() || '我的学习路线';
-    api('POST', '/ai/paths', { title: title, goal: lastGoal, tree: currentTree }).then(function (r) {
-      if (!r.ok) return toast('保存失败：' + ((r.data && r.data.error) || r.status));
-      currentPathId = r.data.path.id; // 之后的追问会在这条路线上迭代
-      toast('✅ 已保存「' + r.data.path.title + '」，左侧列表可随时打开');
-      loadList();
-    }).catch(function () { toast('保存失败：无法连接服务'); });
-  }
-
-  /* ---------- 已保存路线列表 ---------- */
-  function loadList() {
-    return api('GET', '/ai/paths').then(function (r) {
-      if (!r.ok) { listEl.innerHTML = '<p class="muted">加载失败</p>'; return; }
-      renderList(r.data.paths || []);
-    }).catch(function () { listEl.innerHTML = '<p class="muted">无法连接服务</p>'; });
-  }
-
-  function renderList(paths) {
-    if (!paths.length) {
-      listEl.innerHTML = '<p class="muted" style="font-size:12.5px">还没有路线：在右侧直接点「生成路线」让 AI 给你定制；有官方路线时会置顶显示，可直接选择。</p>';
-      return;
-    }
-    listEl.innerHTML = paths.map(function (p) {
-      return '<div class="path-list-item' + (p.isOfficial ? ' official' : '') + '" data-id="' + p.id + '" title="点开这条路线' +
-        (p.isOfficial ? '（官方路线，可直接学习；也可以继续向 AI 提要求调整）' : '，可以继续向 AI 提要求调整') + '">' +
-        '<div class="path-list-title">' + (p.isOfficial ? '<span class="chip ok" style="margin-right:6px">⭐ 官方</span>' : '') + esc(p.title) + '</div>' +
-        '<div class="path-list-meta">' + (p.stageCount || 0) + ' 个阶段 · ' + esc(p.createdBy || '?') + ' · ' + esc(String(p.createdAt || '').slice(5, 16)) + '</div>' +
-        (p.summary ? '<div class="path-list-summary">' + esc(p.summary) + '</div>' : '') +
-        '<div class="path-list-ops"><button class="btn tiny" data-op="open">打开</button>' +
-        '<button class="btn tiny danger" data-op="del" title="删除这条路线">删除</button></div>' +
-        '</div>';
-    }).join('');
-    listEl.querySelectorAll('.path-list-item').forEach(function (item) {
-      var id = Number(item.dataset.id);
-      item.addEventListener('click', function (e) {
-        var opBtn = e.target.closest('button[data-op]');
-        var p = paths.filter(function (x) { return x.id === id; })[0];
-        if (opBtn && opBtn.dataset.op === 'del') {
-          e.stopPropagation();
-          if (!confirm('确定删除路线「' + p.title + '」？')) return;
-          api('DELETE', '/ai/paths/' + id).then(function (r) {
-            if (!r.ok) return toast('删除失败：' + ((r.data && r.data.error) || r.status));
-            toast('已删除');
-            if (currentPathId === id) { currentPathId = null; currentTree = null; }
+      function savePath() {
+        if (!savingTree) return;
+        E.api('POST', '/ai/paths', { title: saveTitle.value.trim() || '我的学习路线', goal: lastGoal.value, tree: savingTree })
+          .then(function (r) {
+            if (!r.ok) return E.toast('保存失败：' + ((r.data && r.data.error) || r.status), 'error');
+            currentPathId.value = r.data.path.id;
+            saveVisible.value = false;
+            E.toast('已保存「' + r.data.path.title + '」，左侧列表可随时打开', 'success');
             loadList();
-          }).catch(function () { toast('删除失败：无法连接服务'); });
-          return;
-        }
-        openPath(p);
+          }).catch(function () { E.toast('保存失败：无法连接服务', 'error'); });
+      }
+
+      function openPath(p) {
+        if (!p.tree) return E.toast('这条路线的数据已损坏', 'error');
+        currentTree.value = p.tree;
+        currentPathId.value = p.id;
+        lastGoal.value = p.goal || lastGoal.value;
+        messages.value.push({ role: 'user', content: '打开路线「' + p.title + '」，我可以在它基础上继续调整' });
+        messages.value.push({ role: 'assistant', tree: p.tree });
+        scrollBottom();
+      }
+
+      function delPath(p) {
+        E.confirmBox('确定删除路线「' + p.title + '」？').then(function (ok) {
+          if (!ok) return;
+          E.api('DELETE', '/ai/paths/' + p.id).then(function (r) {
+            if (!r.ok) return E.toast('删除失败：' + ((r.data && r.data.error) || r.status), 'error');
+            if (currentPathId.value === p.id) { currentPathId.value = null; currentTree.value = null; }
+            E.toast('已删除', 'success');
+            loadList();
+          }).catch(function () { E.toast('删除失败：无法连接服务', 'error'); });
+        });
+      }
+
+      Vue.onMounted(function () {
+        E.boot(false).then(function () {
+          Promise.all([loadList(), E.knowledgeTitles().then(function (m) { titles.value = m; })]);
+        }).catch(function () { /* boot 内已跳转 */ });
       });
-    });
-  }
 
-  function openPath(p) {
-    if (!p.tree) return toast('这条路线的数据已损坏');
-    currentTree = p.tree;
-    currentPathId = p.id;
-    lastGoal = p.goal || lastGoal;
-    clearEmptyHint();
-    appendUser('打开已保存的路线「' + p.title + '」，我可以在它基础上继续调整');
-    appendTree(p.tree, true);
-    toast('已打开，继续在下方输入调整要求');
-  }
+      return {
+        state: state, paths: paths, titles: titles, messages: messages, input: input,
+        generating: generating, currentPathId: currentPathId,
+        saveVisible: saveVisible, saveTitle: saveTitle, chatEl: chatEl,
+        shortTime: shortTime, goHome: goHome, logout: logout,
+        send: send, openSave: openSave, savePath: savePath, openPath: openPath, delPath: delPath
+      };
+    }
+  });
 
-  /* ---------- 启动 ---------- */
-  KG_PAGE.boot(false).then(function () {
-    KG_PAGE.knowledgeTitles().then(function (m) { staticTitles = m; });
-    loadList();
-    inputEl.focus();
-  }).catch(function () { /* boot 内已跳转 */ });
+  app.component('route-items', RouteItems);
+  app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
+  app.mount('#app');
 })();
