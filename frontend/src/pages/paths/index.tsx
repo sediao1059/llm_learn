@@ -1,161 +1,168 @@
-import { useEffect, useState, useRef } from 'react';
-import { Card, Button, Input, Tag, Collapse, Empty, Spin, List, Modal, message } from 'antd';
-import { SendOutlined, SaveOutlined } from '@ant-design/icons';
-import { api } from '../../api/client';
-import { useAuth } from '../../store/auth';
+import { useEffect, useState, useCallback } from 'react';
+import { Card, Progress, Tag, Button, Empty, Spin, message } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import TreeView from './TreeView';
+import GenerateModal from './GenerateModal';
 
-interface ChatMsg { role: 'user' | 'assistant'; content?: string; tree?: any; error?: string; loading?: boolean; }
-interface PathItem { id: number; title: string; isOfficial: boolean; createdBy: string; tree: any; goal: string; }
+const headers = () => ({
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
+});
 
 export default function PathsPage() {
-  const { user } = useAuth();
-  const [paths, setPaths] = useState<PathItem[]>([]);
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [currentPathId, setCurrentPathId] = useState<number | null>(null);
-  const [currentTree, setCurrentTree] = useState<any>(null);
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [saveTitle, setSaveTitle] = useState('');
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [paths, setPaths] = useState<any[]>([]);
+  const [progress, setProgress] = useState<Record<string, number>>({});
+  const [refTitles, setRefTitles] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [genOpen, setGenOpen] = useState(false);
+  const [genPathId, setGenPathId] = useState<number | undefined>();
 
-  useEffect(() => {
-    api.get('/ai/paths').then(r => setPaths(r.data.paths || [])).catch(() => {});
-  }, []);
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      fetch('/api/ai/paths', { headers: headers() }).then(r => r.json()),
+      fetch('/api/progress', { headers: headers() }).then(r => r.json()),
+      fetch('/api/knowledge/bundle.json').then(r => r.json()),
+    ]).then(([p, pr, kb]) => {
+      const list = p.paths || [];
+      setPaths(list);
+      // 进度
+      const prog: Record<string, number> = {};
+      if (pr.progress) {
+        for (const [id, v] of Object.entries(pr.progress)) {
+          prog[id] = (v as any).level || 0;
+        }
+      }
+      setProgress(prog);
+      // refId → title
+      const titles: Record<string, string> = {};
+      for (const n of kb.nodes || []) titles[n.id] = n.title;
+      setRefTitles(titles);
+      // 默认选中第一条
+      if (list.length && !selectedId) setSelectedId(list[0].id);
+    }).finally(() => setLoading(false));
+  }, [selectedId]);
+  useEffect(() => { load(); }, []);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  const send = async () => {
-    if (!input.trim() || generating) return;
-    const text = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', loading: true }]);
-    setGenerating(true);
-    try {
-      const payload = currentPathId && currentTree
-        ? { pathId: currentPathId, feedback: text }
-        : { goal: text };
-      const { data } = await api.post('/ai/paths/generate', payload);
-      setCurrentTree(data.tree);
-      setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', tree: data.tree }]);
-    } catch (e: any) {
-      setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', error: e?.response?.data?.message || '生成失败' }]);
-    } finally { setGenerating(false); }
+  const setLevel = async (refId: string, level: number) => {
+    // 乐观更新
+    setProgress(prev => ({ ...prev, [refId]: level }));
+    await fetch('/api/progress', {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ nodeId: refId, level }),
+    });
   };
 
-  const savePath = async () => {
-    if (!currentTree) return;
-    try {
-      const { data } = await api.post('/ai/paths', { title: saveTitle || currentTree.title, goal: '', tree: currentTree });
-      setCurrentPathId(data.path.id);
-      message.success('已保存');
-      setSaveOpen(false);
-      api.get('/ai/paths').then(r => setPaths(r.data.paths || []));
-    } catch (e: any) { message.error(e?.response?.data?.message || '保存失败'); }
+  const batchSetLevel = async (refIds: string[], level: number) => {
+    setProgress(prev => {
+      const next = { ...prev };
+      refIds.forEach(id => { next[id] = level; });
+      return next;
+    });
+    for (const id of refIds) {
+      await fetch('/api/progress', {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify({ nodeId: id, level }),
+      });
+    }
   };
 
-  const openPath = (p: PathItem) => {
-    setCurrentPathId(p.id);
-    setCurrentTree(p.tree);
-    setMessages(prev => [
-      ...prev,
-      { role: 'user', content: `打开路线「${p.title}」` },
-      { role: 'assistant', tree: p.tree },
-    ]);
+  // 计算路线进度百分比
+  const routePct = (path: any): number => {
+    if (!path?.tree?.stages) return 0;
+    const collect = (items: any[]): string[] =>
+      items.flatMap(it => [it.refId, ...collect(it.children || [])]).filter(Boolean) as string[];
+    const ids: string[] = path.tree.stages.flatMap((st: any) => collect(st.items));
+    if (!ids.length) return 0;
+    const done = ids.filter((id: string) => (progress[id] || 0) >= 1).length;
+    return Math.round((done / ids.length) * 100);
   };
 
-  const renderTree = (tree: any) => (
-    <Card size="small" title={tree.title} extra={
-      <Button size="small" type="primary" icon={<SaveOutlined />} onClick={() => { setSaveTitle(tree.title); setSaveOpen(true); }}>
-        保存
-      </Button>
-    }>
-      {tree.summary && <p style={{ color: '#909399', fontSize: 13 }}>{tree.summary}</p>}
-      <Collapse>
-        {(tree.stages || []).map((st: any, i: number) => (
-          <Collapse.Panel key={i} header={`阶段 ${i + 1} · ${st.title}`}>
-            <div style={{ color: '#909399', fontSize: 12, marginBottom: 8 }}>{st.goal}</div>
-            {(st.items || []).map((it: any, j: number) => (
-              <div key={j} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <b>{it.title}</b>
-                {it.refId ? (
-                  <Tag color="success" style={{ cursor: 'pointer' }} onClick={() => window.open(`/?node=${it.refId}`, '_blank')}>
-                    🔗 关联 ↗
-                  </Tag>
-                ) : <Tag>新主题</Tag>}
-                {it.why && <span style={{ color: '#c0c4cc', fontSize: 12 }}>{it.why}</span>}
-              </div>
-            ))}
-          </Collapse.Panel>
-        ))}
-      </Collapse>
-    </Card>
-  );
+  const selected = paths.find(p => p.id === selectedId);
 
   return (
-    <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)' }}>
-      <div style={{ width: 280, flexShrink: 0 }}>
-        <Card title="已保存的路线" size="small">
-          <List
-            dataSource={paths}
-            renderItem={(p) => (
-              <List.Item style={{ cursor: 'pointer', padding: '8px 4px' }} onClick={() => openPath(p)}>
-                <List.Item.Meta
-                  title={<span>{p.isOfficial && <Tag color="warning" style={{ marginRight: 4 }}>⭐</Tag>}{p.title}</span>}
-                  description={`${p.createdBy} · ${p.tree?.stages?.length || 0} 个阶段`}
-                />
-              </List.Item>
-            )}
-            locale={{ emptyText: <Empty description="还没有路线" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-          />
-        </Card>
+    <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)', maxWidth: 1280, margin: '0 auto' }}>
+      {/* 左侧：路线卡片列表 */}
+      <div style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', paddingTop: 60 }}><Spin /></div>
+        ) : paths.length === 0 ? (
+          <Empty description="还没有路线" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          paths.map(p => {
+            const pct = routePct(p);
+            const isSelected = p.id === selectedId;
+            return (
+              <Card
+                key={p.id}
+                size="small"
+                hoverable
+                onClick={() => setSelectedId(p.id)}
+                style={{
+                  marginBottom: 10, cursor: 'pointer',
+                  border: isSelected ? '2px solid #1677ff' : '1px solid #e8e8e8',
+                  background: isSelected ? '#f0f5ff' : '#fff',
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{p.title}</span>
+                  <Progress
+                    type="circle" percent={pct} size={42}
+                    strokeColor={pct === 100 ? '#52c41a' : '#1677ff'}
+                    format={(v) => <span style={{ fontSize: 10 }}>{v}%</span>}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8c8c8c' }}>
+                  {p.isOfficial && <Tag color="warning" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>⭐ 官方</Tag>}
+                  <span>{p.stageCount || (p.tree?.stages?.length) || 0} 个阶段</span>
+                </div>
+                {p.summary && (
+                  <div style={{
+                    fontSize: 11, color: '#bfbfbf', marginTop: 4,
+                    overflow: 'hidden', display: '-webkit-box',
+                    WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                  }}>{p.summary}</div>
+                )}
+              </Card>
+            );
+          })
+        )}
+        <Button
+          type="dashed" block icon={<PlusOutlined />}
+          onClick={() => { setGenPathId(undefined); setGenOpen(true); }}
+          style={{ marginTop: 4, borderRadius: 8 }}
+        >
+          AI 定制路线
+        </Button>
       </div>
 
-      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 } }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {messages.length === 0 && (
-            <Empty description={
-              <div>
-                <p>和 AI 聊出你的学习路线</p>
-                <p style={{ fontSize: 12, color: '#c0c4cc' }}>告诉它你想学什么，它按图谱知识排一条「先学什么、后学什么」的路线</p>
-              </div>
-            } />
-          )}
-          {messages.map((m, i) => (
-            <div key={i} style={{
-              display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 12,
-            }}>
-              {m.role === 'user' ? (
-                <div style={{ background: '#1677ff', color: '#fff', padding: '8px 14px', borderRadius: '12px 12px 2px 12px', maxWidth: '70%' }}>
-                  {m.content}
-                </div>
-              ) : m.loading ? (
-                <Spin />
-              ) : m.error ? (
-                <Card size="small" style={{ borderColor: '#ff4d4f' }}><span style={{ color: '#ff4d4f' }}>⚠ {m.error}</span></Card>
-              ) : m.tree ? (
-                <div style={{ width: '90%' }}>{renderTree(m.tree)}</div>
-              ) : null}
-            </div>
-          ))}
-          <div ref={chatEndRef} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #f0f0f0' }}>
-          <Input.TextArea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="输入学习目标…（Enter 发送，Shift+Enter 换行）"
-            autoSize={{ minRows: 1, maxRows: 4 }}
-            disabled={generating}
+      {/* 右侧：树形学习视图 */}
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', paddingRight: 4 }}>
+        {selected ? (
+          <TreeView
+            path={selected}
+            progress={progress}
+            refTitles={refTitles}
+            onLevelChange={setLevel}
+            onBatchLevel={batchSetLevel}
+            onAIAdjust={() => { setGenPathId(selected.id); setGenOpen(true); }}
           />
-          <Button type="primary" icon={<SendOutlined />} loading={generating} onClick={send}>发送</Button>
-        </div>
-      </Card>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Empty description="从左侧选择一条路线开始学习" />
+          </div>
+        )}
+      </div>
 
-      <Modal open={saveOpen} onCancel={() => setSaveOpen(false)} onOk={savePath} title="保存这条路线">
-        <Input value={saveTitle} onChange={e => setSaveTitle(e.target.value)} placeholder="路线名称" maxLength={60} />
-      </Modal>
+      {/* AI 生成弹窗 */}
+      <GenerateModal
+        open={genOpen}
+        onClose={() => setGenOpen(false)}
+        pathId={genPathId}
+        onSaved={() => load()}
+      />
     </div>
   );
 }
