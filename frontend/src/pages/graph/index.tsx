@@ -70,10 +70,35 @@ export default function GraphPage() {
     }
     chart.current.setOption({
       tooltip: {
+        trigger: 'item',
+        className: 'kg-tip',
+        backgroundColor: '#fff',
+        borderColor: '#e5e6eb',
+        padding: [8, 12],
+        textStyle: { color: '#333', fontSize: 13 },
+        extraCssText: 'max-width: 45vw; white-space: normal; word-break: break-word; word-wrap: break-word; box-shadow: 0 4px 14px rgba(0,0,0,0.12); border-radius: 8px;',
+        position: function (point: number[], params: any, dom: HTMLElement, rect: any, size: any) {
+          // 优先贴在节点左上方，放不下时自动翻转，确保不超出图谱区域
+          const tipW = size.contentSize[0];
+          const tipH = size.contentSize[1];
+          const chartW = chart.current ? chart.current.getWidth() : 800;
+          const chartH = chart.current ? chart.current.getHeight() : 600;
+          let x = point[0] - tipW - 14;
+          let y = point[1] - tipH - 10;
+          if (x < 4) x = point[0] + 14;
+          if (y < 4) y = point[1] + 14;
+          if (x + tipW > chartW - 4) x = chartW - tipW - 4;
+          if (y + tipH > chartH - 4) y = chartH - tipH - 4;
+          return [Math.max(4, x), Math.max(4, y)];
+        },
         formatter: (p: any) => {
           if (p.dataType !== 'node') return '';
           const n = p.data.value;
-          return `<b>${n.title}</b><br/>分类：${n.category}<br/>层次：${n.layer || '未分层'}<br/>${n.summary || ''}`;
+          const summary = n.summary ? String(n.summary).slice(0, 100) : '';
+          return `<b>${n.title}</b><br/>` +
+            `<span style="color:#8c8c8c;font-size:12px">分类：${n.category} · 层次：${n.layer || '未分层'}</span>` +
+            (summary ? `<br/><span style="color:#8c8c8c;font-size:12px">${summary}</span>` : '') +
+            '<br/><span style="color:#1677ff;font-size:11px">点击查看笔记</span>';
         },
       },
       legend: { data: data.categories, bottom: 10 },
