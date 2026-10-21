@@ -21,9 +21,10 @@ interface Props {
   onBatchLevel: (refIds: string[], level: number) => void;
   onAIAdjust: () => void;
   onTitleChange: (id: number, title: string) => void;
+  onArticleOpen: (refId: string) => void;
 }
 
-export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust, onTitleChange }: Props) {
+export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust, onTitleChange, onArticleOpen }: Props) {
   const tree = path.tree;
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -69,20 +70,15 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <h3 style={{ margin: 0, fontSize: 17 }}>{tree.title}</h3>
           {path.isOfficial && <Tag color="warning">⭐ 官方</Tag>}
-          <Button
-            type="text" size="small" icon={<EditOutlined />}
-            onClick={() => { setEditTitle(tree.title); setEditOpen(true); }}
-            title="修改路线名称"
-          />
+          <Button type="text" size="small" icon={<EditOutlined />}
+            onClick={() => { setEditTitle(tree.title); setEditOpen(true); }} title="修改路线名称" />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: pct === 100 ? '#52c41a' : '#8c8c8c' }}>
               {done}/{allRefIds.length} 已学
             </span>
-            <Progress
-              type="circle" percent={pct} size={44}
+            <Progress type="circle" percent={pct} size={44}
               strokeColor={pct === 100 ? '#52c41a' : '#1677ff'}
-              format={(p) => <span style={{ fontSize: 11 }}>{p}%</span>}
-            />
+              format={(p) => <span style={{ fontSize: 11 }}>{p}%</span>} />
           </div>
         </div>
         {tree.summary && <p style={{ color: '#8c8c8c', fontSize: 13, margin: 0 }}>{tree.summary}</p>}
@@ -92,14 +88,11 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
             全部标记已学
           </Button>
           <Popconfirm title="确定重置这条路线的所有进度？" onConfirm={() => {
-            onBatchLevel(allRefIds, 0);
-            message.success('进度已重置');
+            onBatchLevel(allRefIds, 0); message.success('进度已重置');
           }}>
             <Button size="small" icon={<ClearOutlined />}>重置进度</Button>
           </Popconfirm>
-          <Button size="small" icon={<RobotOutlined />} onClick={onAIAdjust}>
-            AI 调整这条路线
-          </Button>
+          <Button size="small" icon={<RobotOutlined />} onClick={onAIAdjust}>AI 调整这条路线</Button>
         </div>
       </Card>
 
@@ -128,6 +121,7 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
                     level={item.refId ? (progress[item.refId] || 0) : 0}
                     refTitle={item.refId ? refTitles[item.refId] : undefined}
                     onLevelChange={onLevelChange}
+                    onArticleOpen={onArticleOpen}
                   />
                 ))}
               </>
@@ -136,16 +130,10 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
         })}
       />
 
-      <Modal
-        open={editOpen} onCancel={() => setEditOpen(false)}
-        title="修改路线名称" width={380}
-        onOk={saveTitle}
-      >
-        <Input
-          value={editTitle} onChange={e => setEditTitle(e.target.value)}
-          maxLength={60} placeholder="路线名称" autoFocus
-          onPressEnter={saveTitle}
-        />
+      <Modal open={editOpen} onCancel={() => setEditOpen(false)}
+        title="修改路线名称" width={380} onOk={saveTitle}>
+        <Input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+          maxLength={60} placeholder="路线名称" autoFocus onPressEnter={saveTitle} />
       </Modal>
     </div>
   );

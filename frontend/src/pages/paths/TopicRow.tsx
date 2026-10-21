@@ -19,10 +19,11 @@ interface Props {
   level: number;
   refTitle?: string;
   onLevelChange: (refId: string, level: number) => void;
+  onArticleOpen?: (refId: string) => void;
   depth?: number;
 }
 
-export default function TopicRow({ topic, level, refTitle, onLevelChange, depth = 0 }: Props) {
+export default function TopicRow({ topic, level, refTitle, onLevelChange, onArticleOpen, depth = 0 }: Props) {
   const current = LEVELS[level] || LEVELS[0];
 
   const popoverContent = (
@@ -46,6 +47,10 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, depth 
     </div>
   );
 
+  const handleTitleClick = () => {
+    if (topic.refId && onArticleOpen) onArticleOpen(topic.refId);
+  };
+
   return (
     <div style={{ paddingLeft: depth * 24 }}>
       <div
@@ -54,7 +59,6 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, depth 
           borderBottom: '1px solid #f5f5f5',
         }}
       >
-        {/* 状态图标 + Popover */}
         <Popover content={popoverContent} trigger="click" placement="left"
           title={topic.refId ? '标注学习程度' : '该主题暂未关联知识点'}>
           <span
@@ -70,40 +74,36 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, depth 
           </span>
         </Popover>
 
-        {/* 主题名 */}
         <span
           style={{
             fontSize: 13.5, fontWeight: 500, flex: 1,
-            cursor: topic.refId ? 'pointer' : 'default',
+            cursor: topic.refId && onArticleOpen ? 'pointer' : 'default',
             color: topic.refId ? '#1677ff' : '#333',
           }}
-          onClick={() => topic.refId && window.open(`/?node=${topic.refId}`, '_blank')}
+          onClick={handleTitleClick}
         >
           {topic.title}
         </span>
 
-        {/* 关联标签 */}
         {topic.refId ? (
           <Tag
             color="success"
-            style={{ cursor: 'pointer', fontSize: 11, margin: 0 }}
-            onClick={() => window.open(`/?node=${topic.refId}`, '_blank')}
+            style={{ cursor: onArticleOpen ? 'pointer' : 'default', fontSize: 11, margin: 0 }}
+            onClick={handleTitleClick}
           >
-            🔗 {refTitle || topic.refId} ↗
+            🔗 {refTitle || topic.refId}
           </Tag>
         ) : (
           <Tag style={{ fontSize: 11, margin: 0, color: '#8c8c8c' }}>新主题</Tag>
         )}
       </div>
 
-      {/* 为什么学 */}
       {topic.why && (
         <div style={{ paddingLeft: 28, paddingRight: 12, paddingBottom: 6, fontSize: 11.5, color: '#bfbfbf' }}>
           {topic.why}
         </div>
       )}
 
-      {/* 子主题 */}
       {topic.children?.map((child, i) => (
         <TopicRow
           key={i}
@@ -111,6 +111,7 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, depth 
           level={child.refId ? level : 0}
           refTitle={refTitle}
           onLevelChange={onLevelChange}
+          onArticleOpen={onArticleOpen}
           depth={depth + 1}
         />
       ))}

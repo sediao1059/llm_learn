@@ -101,6 +101,76 @@ export class PathsController {
     return { path: { id: r.id, title } };
   }
 
+  /** AI 智能扩展路线：将一个新知识点插入路线树最合适的位置 */
+  @Post('ai/paths/:id/extend')
+  async extend(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType) {
+    const row = await this.prisma.learningPath.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('路线不存在');
+    if (row.createdBy !== user.username && user.role !== 'admin') {
+      throw new ForbiddenException('只能扩展自己创建的路线');
+    }
+    const nodeId = String(body.nodeId || '').trim();
+    if (!nodeId) throw new BadRequestException('缺少 nodeId');
+
+    const model = await this.llm.getGlobalModel();
+    if (!model) throw new BadRequestException('尚未配置全局默认模型');
+
+    // 获取知识点信息
+    const note = await this.prisma.note.findUnique({ where: { id: nodeId } });
+    const aiNode = note ? null : await this.prisma.aiNode.findUnique({ where: { id: nodeId } });
+    const node = note || aiNode;
+    if (!node) throw new BadRequestException('知识点不存在');
+
+    // 已在路线中则不重复添加
+    if (row.tree.includes(`"refId":"${nodeId}"`)) {
+      throw new BadRequestException('该知识点已在路线中');
+    }
+
+    const system = `你是学习路线编辑助手。用户想把一个新知识点插入到已有学习路线的最合适位置。
+- 只在合适的阶段插入这个知识点（标题 + refId + why），不改动其他内容
+- 如果需要可以在现有阶段中插入，也可以新建一个阶段（仅在确实需要时）
+- 输出更新后的完整路线 JSON（格式与输入完全相同）
+严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":""}]}]}`;
+
+    const userPrompt = `【当前路线 JSON】
+${row.tree}
+
+【要插入的知识点】
+id: ${nodeId}
+标题: ${node.title}
+分类: ${node.category}
+层次: ${node.layer || '未分层'}
+标签: ${note ? JSON.parse(note.tags || '[]').join(', ') : ''}
+摘要: ${(note?.summary || aiNode?.content || '').slice(0, 200)}
+
+请将这个知识点插入路线中最合适的位置，输出更新后的完整 JSON。`;
+
+    const r = await this.llm.chatText(model, { system, user: userPrompt, timeoutMs: 180_000 });
+    if (!r.ok) throw new BadRequestException('AI 整合失败：' + r.error);
+
+    // 解析并校验
+    try {
+      const start = r.text.indexOf('{');
+      const end = r.text.lastIndexOf('}');
+      const raw = JSON.parse(r.text.slice(start, end + 1));
+      // 基本校验
+      if (!raw.stages?.length) throw new Error('没有阶段');
+      // 确保新 nodeId 已加入
+      const treeStr = JSON.stringify(raw);
+      if (!treeStr.includes(`"refId":"${nodeId}"`)) throw new Error('新知识点未加入');
+      // 确保原有 refId 没有丢失
+      const oldRefIds = (row.tree.match(/"refId":"([^"]+)"/g) || []).map(m => m.replace(/"refId":"|"/g, ''));
+      const lostIds = oldRefIds.filter(oid => !treeStr.includes(`"refId":"${oid}"`));
+      if (lostIds.length) throw new Error(`丢失了 ${lostIds.length} 个已有知识点`);
+
+      const tree = JSON.stringify(raw);
+      await this.prisma.learningPath.update({ where: { id }, data: { tree } });
+      return { tree: raw };
+    } catch (e: any) {
+      throw new BadRequestException('路线更新校验失败：' + e.message + '，请重试');
+    }
+  }
+
   @Patch('ai/paths/:id')
   async updateTitle(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType) {
     const row = await this.prisma.learningPath.findUnique({ where: { id } });
