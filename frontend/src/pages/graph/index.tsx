@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Card, Tabs, Tag, Button, Drawer, Empty, Spin, Tooltip, FloatButton, Modal, Radio, Input, message } from 'antd';
+import { Card, Tag, Button, Drawer, Empty, Spin, Tooltip, FloatButton, Modal, Input, message, List } from 'antd';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/auth';
+import AnnotationModal from './AnnotationModal';
 
 interface KnowledgeData {
   nodes: any[]; edges: any[]; categories: string[]; layers: string[];
@@ -11,24 +12,36 @@ interface KnowledgeData {
 
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
+  const drawerBodyRef = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   const [data, setData] = useState<KnowledgeData | null>(null);
   const [aiData, setAiData] = useState<any>(null);
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('view_mode') || 'force');
   const [selected, setSelected] = useState<string | null>(null);
-  const [tierData, setTierData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
+  // 划词注释
+  const [annoOpen, setAnnoOpen] = useState(false);
+  const [anchorText, setAnchorText] = useState('');
+  const [selectionPos, setSelectionPos] = useState<{x: number; y: number} | null>(null);
+  const [annotations, setAnnotations] = useState<any[]>([]);
+  const [annotationsKey, setAnnotationsKey] = useState(0);
+
   useEffect(() => {
     api.get('/knowledge/bundle.json').then(r => setData(r.data)).catch(() => {});
-    api.get('/graph/tiers').then(r => setTierData(r.data)).catch(() => {});
-    if (user) {
-      api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
-    }
+    if (user) api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
   }, [user]);
+
+  // 加载注释
+  useEffect(() => {
+    if (selected && user) {
+      api.get(`/ai/annotations?nodeId=${selected}`).then(r => {
+        setAnnotations(r.data?.annotations || []);
+      }).catch(() => {});
+    } else setAnnotations([]);
+  }, [selected, user, annotationsKey]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -43,124 +56,189 @@ export default function GraphPage() {
     setLoading(false);
     const allNodes = [...data.nodes];
     const allEdges = [...data.edges];
-    // merge AI nodes
     if (aiData?.nodes) {
       const knownIds = new Set(data.nodes.map(n => n.id));
-      const aiEdges = aiData.edges.filter((e: any) =>
-        (knownIds.has(e.source) || aiData.nodes.some((n: any) => n.id === e.source)) &&
-        (knownIds.has(e.target) || aiData.nodes.some((n: any) => n.id === e.target))
-      );
       allNodes.push(...aiData.nodes);
-      allEdges.push(...aiEdges);
+      allEdges.push(...(aiData.edges || []).filter((e: any) =>
+        knownIds.has(e.source) || aiData.nodes.some((n: any) => n.id === e.source)));
     }
-
     const degrees: Record<string, number> = {};
     for (const e of allEdges) {
       degrees[e.source] = (degrees[e.source] || 0) + 1;
       degrees[e.target] = (degrees[e.target] || 0) + 1;
     }
-
-    const chartNodes = allNodes.map(n => ({
-      id: n.id,
-      name: (n.ai ? '✨ ' : '') + n.title,
-      symbolSize: 30 + Math.min((degrees[n.id] || 0) * 7, 30),
-      value: n,
-      category: data.categories.indexOf(n.category),
-      itemStyle: { opacity: n.status === 'todo' ? 0.45 : 1 },
-    }));
-
-    const chartEdges = allEdges.map(e => ({
-      source: e.source, target: e.target,
-      lineStyle: { color: '#b3bac6', width: 1.5, opacity: 0.6, curveness: 0.12 },
-    }));
-
     chart.current.setOption({
       tooltip: {
         formatter: (p: any) => {
           if (p.dataType !== 'node') return '';
           const n = p.data.value;
-          return `<b>${n.title}</b><br/>分类：${n.category}<br/>层次：${n.layer || '未分层'}<br/>难度：${n.difficulty || '未标注'}<br/>${n.summary || ''}`;
+          return `<b>${n.title}</b><br/>分类：${n.category}<br/>层次：${n.layer || '未分层'}<br/>${n.summary || ''}`;
         },
       },
       legend: { data: data.categories, bottom: 10 },
       series: [{
-        type: 'graph',
-        layout: 'force',
-        roam: true,
-        draggable: true,
+        type: 'graph', layout: 'force', roam: true, draggable: true,
         categories: data.categories.map(name => ({ name })),
         force: { repulsion: 480, edgeLength: 140, gravity: 0.08 },
         label: { show: true, fontSize: 12, color: '#1a1a1a' },
         emphasis: { focus: 'adjacency' },
-        data: chartNodes,
-        links: chartEdges,
+        data: allNodes.map(n => ({
+          id: n.id, name: (n.ai ? '✨ ' : '') + n.title,
+          symbolSize: 30 + Math.min((degrees[n.id] || 0) * 7, 30),
+          value: n, category: data.categories.indexOf(n.category),
+          itemStyle: { opacity: n.status === 'todo' ? 0.45 : 1 },
+        })),
+        links: allEdges.map(e => ({
+          source: e.source, target: e.target,
+          lineStyle: { color: '#b3bac6', width: 1.5, opacity: 0.6, curveness: 0.12 },
+        })),
       }],
     }, true);
-
     chart.current.on('click', (p: any) => {
-      if (p.dataType === 'node') setSelected(p.data.value.id);
+      if (p.dataType === 'node') {
+        setSelected(p.data.value.id);
+        setNoteOpen(true);
+      }
     });
   }, [data, aiData]);
 
   const node = data?.nodes.find(n => n.id === selected) || aiData?.nodes?.find((n: any) => n.id === selected);
 
-  const renderTags = (tags: string[]) => tags.map(t => <Tag key={t}>#{t}</Tag>);
+  // 划词检测
+  const handleMouseUp = useCallback(() => {
+    if (!user || !noteOpen) { setSelectionPos(null); return; }
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) { setSelectionPos(null); return; }
+    const text = sel.toString().trim();
+    if (!text || text.length < 2 || text.length > 1000) { setSelectionPos(null); return; }
+    const range = sel.getRangeAt(0);
+    const container = drawerBodyRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) { setSelectionPos(null); return; }
+    const rect = range.getBoundingClientRect();
+    setAnchorText(text);
+    setSelectionPos({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+  }, [user, noteOpen]);
+
+  // 全局点击关闭浮动按钮
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.anno-float-btn')) setSelectionPos(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const openAnnotation = () => {
+    setAnnoOpen(true);
+    setSelectionPos(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const refreshAnnotations = () => setAnnotationsKey(k => k + 1);
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
       <div ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
+
+      {/* 笔记 Drawer */}
       <Drawer
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        width={480}
-        title={node?.title || ''}
+        open={noteOpen && !!selected}
+        onClose={() => { setNoteOpen(false); setSelected(null); }}
+        width={480} title={node?.title || ''}
         destroyOnClose
       >
         {node ? (
-          <div>
+          <div ref={drawerBodyRef} onMouseUp={handleMouseUp}>
             <div style={{ marginBottom: 8 }}>
               <Tag color="blue">{node.layer || '未分层'}</Tag>
               <Tag color="geekblue">{node.category}</Tag>
               {node.difficulty && <Tag color="orange">{node.difficulty}</Tag>}
-              {node.status === 'todo' && <Tag color="default">待学习</Tag>}
+              {node.status === 'todo' && <Tag>待学习</Tag>}
               {node.ai && <Tag color="purple">✨ AI 沉淀</Tag>}
             </div>
             {node.summary && (
-              <Card size="small" style={{ marginBottom: 12, background: '#f6f6f6' }}>
-                {node.summary}
+              <Card size="small" style={{ marginBottom: 12, background: '#f6f6f6' }}>{node.summary}</Card>
+            )}
+            {node.tags?.length > 0 && (
+              <div style={{ marginBottom: 12 }}>{node.tags.map((t: string) => <Tag key={t}>#{t}</Tag>)}</div>
+            )}
+            <div
+              style={{ lineHeight: 1.8, fontSize: 14 }}
+              dangerouslySetInnerHTML={{ __html: node.content || '（暂无内容）' }}
+            />
+
+            {/* 注释列表 */}
+            {annotations.length > 0 && (
+              <Card title={`💬 本篇注释（${annotations.length}）`} size="small" style={{ marginTop: 16 }}>
+                {annotations.map((a: any) => (
+                  <div key={a.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <Tag style={{ fontSize: 10 }}>{a.type === 'word' ? '词' : a.type === 'sentence' ? '句' : a.type === 'document' ? '整篇' : a.type}</Tag>
+                      <Tag color={a.status === 'approved' ? 'success' : a.status === 'pending' ? 'warning' : 'error'} style={{ fontSize: 10 }}>
+                        {a.status === 'approved' ? '已审核' : a.status === 'pending' ? '待审核' : '驳回'}
+                      </Tag>
+                      <span style={{ fontSize: 11, color: '#bfbfbf', marginLeft: 'auto' }}>{a.createdBy}</span>
+                    </div>
+                    {a.anchorText && <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>「{a.anchorText.slice(0, 50)}…」</div>}
+                    <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>{a.answer?.slice(0, 300)}</div>
+                  </div>
+                ))}
               </Card>
             )}
-            {node.tags && <div style={{ marginBottom: 12 }}>{renderTags(node.tags)}</div>}
-            <div
-              className="markdown-body"
-              dangerouslySetInnerHTML={{ __html: node.content || '（暂无内容）' }}
-              style={{ lineHeight: 1.8, fontSize: 14 }}
-            />
           </div>
         ) : <Empty description="点击左侧节点查看笔记" />}
       </Drawer>
 
+      {/* 浮动"解答"按钮（选区上方） */}
+      {selectionPos && (
+        <button
+          className="anno-float-btn"
+          onClick={openAnnotation}
+          style={{
+            position: 'fixed', left: selectionPos.x - 30, top: selectionPos.y - 36,
+            zIndex: 1000, padding: '4px 12px', borderRadius: 6,
+            background: '#1677ff', color: '#fff', border: 'none',
+            cursor: 'pointer', fontSize: 12, fontWeight: 500,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)'; }}
+          onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+        >
+          💡 解答
+        </button>
+      )}
+
+      {/* 划词注释弹窗 */}
       {user && selected && (
+        <AnnotationModal
+          open={annoOpen}
+          onClose={() => setAnnoOpen(false)}
+          nodeId={selected}
+          nodeTitle={node?.title || ''}
+          anchorText={anchorText}
+          onSaved={refreshAnnotations}
+          userRole={user.role}
+        />
+      )}
+
+      {/* 悬浮操作按钮 */}
+      {user && selected && noteOpen && (
         <FloatButton.Group shape="circle" style={{ right: 24, bottom: 24 }}>
-          <FloatButton
-            icon={<span>📊</span>}
-            tooltip="标注学习程度"
-            onClick={() => {/* TODO: level modal */}}
-          />
-          <FloatButton
-            icon={<span>📝</span>}
-            tooltip="写个人笔记"
-            onClick={() => {
-              api.get(`/notes?nodeId=${selected}`).then(r => setNoteText(r.data.note || ''));
-              setNoteOpen(true);
-            }}
-          />
+          <FloatButton icon={<span>📊</span>} tooltip="标注学习程度" onClick={() => {
+            // TODO: level modal
+          }} />
+          <FloatButton icon={<span>📝</span>} tooltip="写个人笔记" onClick={() => {
+            api.get(`/notes?nodeId=${selected}`).then(r => setNoteText(r.data.note || ''));
+            setNoteOpen(true);
+          }} />
         </FloatButton.Group>
       )}
 
+      {/* 个人笔记 Modal */}
       <Modal
-        open={noteOpen}
-        onCancel={() => setNoteOpen(false)}
+        open={false} onCancel={() => setNoteOpen(false)}
         title={`📝 我的笔记 · ${node?.title || ''}`}
         onOk={async () => {
           await api.put('/notes', { nodeId: selected, content: noteText });
@@ -168,8 +246,7 @@ export default function GraphPage() {
           setNoteOpen(false);
         }}
       >
-        <Input.TextArea rows={8} value={noteText} onChange={e => setNoteText(e.target.value)}
-          placeholder="写点只有自己看的理解/待办/联想…" />
+        <Input.TextArea rows={8} value={noteText} onChange={e => setNoteText(e.target.value)} />
       </Modal>
 
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%' }}><Spin size="large" /></div>}
