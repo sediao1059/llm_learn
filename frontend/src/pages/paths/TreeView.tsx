@@ -1,5 +1,6 @@
-import { Card, Progress, Collapse, Tag, Button, Space, Popconfirm, message } from 'antd';
-import { CheckOutlined, ClearOutlined, RobotOutlined } from '@ant-design/icons';
+import { useState } from 'react';
+import { Card, Progress, Collapse, Tag, Button, Space, Popconfirm, message, Modal, Input } from 'antd';
+import { CheckOutlined, ClearOutlined, RobotOutlined, EditOutlined } from '@ant-design/icons';
 import TopicRow from './TopicRow';
 
 interface PathTree {
@@ -19,18 +20,19 @@ interface Props {
   onLevelChange: (refId: string, level: number) => void;
   onBatchLevel: (refIds: string[], level: number) => void;
   onAIAdjust: () => void;
+  onTitleChange: (id: number, title: string) => void;
 }
 
-export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust }: Props) {
+export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust, onTitleChange }: Props) {
   const tree = path.tree;
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+
   if (!tree?.stages?.length) return null;
 
-  // 收集所有 refId
   const collectIds = (items: any[]): string[] =>
     items.flatMap(it => [it.refId, ...collectIds(it.children || [])]).filter(Boolean) as string[];
   const allRefIds = tree.stages.flatMap(st => collectIds(st.items));
-
-  // 计算进度
   const done = allRefIds.filter(id => (progress[id] || 0) >= 1).length;
   const pct = allRefIds.length ? Math.round((done / allRefIds.length) * 100) : 0;
 
@@ -40,13 +42,38 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
     return { done: d, total: ids.length };
   };
 
+  const saveTitle = async () => {
+    const title = editTitle.trim();
+    if (!title) return message.warning('标题不能为空');
+    const r = await fetch(`/api/ai/paths/${path.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
+      },
+      body: JSON.stringify({ title }),
+    });
+    if (r.ok) {
+      message.success('标题已更新');
+      onTitleChange(path.id, title);
+      setEditOpen(false);
+    } else {
+      const d = await r.json();
+      message.error(d.message || '更新失败');
+    }
+  };
+
   return (
     <div>
-      {/* 路线概要 */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <h3 style={{ margin: 0, fontSize: 17 }}>{tree.title}</h3>
           {path.isOfficial && <Tag color="warning">⭐ 官方</Tag>}
+          <Button
+            type="text" size="small" icon={<EditOutlined />}
+            onClick={() => { setEditTitle(tree.title); setEditOpen(true); }}
+            title="修改路线名称"
+          />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: pct === 100 ? '#52c41a' : '#8c8c8c' }}>
               {done}/{allRefIds.length} 已学
@@ -76,7 +103,6 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
         </div>
       </Card>
 
-      {/* 阶段折叠面板 */}
       <Collapse
         defaultActiveKey={[0]}
         items={tree.stages.map((st, si) => {
@@ -94,9 +120,7 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
             ),
             children: (
               <>
-                {st.goal && (
-                  <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>🎯 {st.goal}</p>
-                )}
+                {st.goal && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>🎯 {st.goal}</p>}
                 {st.items.map((item, ii) => (
                   <TopicRow
                     key={ii}
@@ -111,6 +135,18 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
           };
         })}
       />
+
+      <Modal
+        open={editOpen} onCancel={() => setEditOpen(false)}
+        title="修改路线名称" width={380}
+        onOk={saveTitle}
+      >
+        <Input
+          value={editTitle} onChange={e => setEditTitle(e.target.value)}
+          maxLength={60} placeholder="路线名称" autoFocus
+          onPressEnter={saveTitle}
+        />
+      </Modal>
     </div>
   );
 }

@@ -148,6 +148,9 @@ export default function PathsPage() {
             onLevelChange={setLevel}
             onBatchLevel={batchSetLevel}
             onAIAdjust={() => { setGenPathId(selected.id); setGenOpen(true); }}
+            onTitleChange={(id, title) => {
+              setPaths(prev => prev.map(p => p.id === id ? { ...p, title } : p));
+            }}
           />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

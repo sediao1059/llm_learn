@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards,
   BadRequestException, NotFoundException, ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,6 +99,19 @@ export class PathsController {
       data: { title, goal: String(body.goal || '').slice(0, 300), tree: JSON.stringify(tree), createdBy: user.username },
     });
     return { path: { id: r.id, title } };
+  }
+
+  @Patch('ai/paths/:id')
+  async updateTitle(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType) {
+    const row = await this.prisma.learningPath.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('路线不存在');
+    if (row.createdBy !== user.username && user.role !== 'admin') {
+      throw new ForbiddenException('只能修改自己创建的路线');
+    }
+    const title = String(body.title || '').trim().slice(0, 60);
+    if (!title) throw new BadRequestException('标题不能为空');
+    await this.prisma.learningPath.update({ where: { id }, data: { title } });
+    return { ok: true, title };
   }
 
   @Delete('ai/paths/:id')

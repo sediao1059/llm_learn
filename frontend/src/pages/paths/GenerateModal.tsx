@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Modal, Input, Button, Spin, Tag, Collapse, message } from 'antd';
+import { Modal, Input, Button, Tag, Collapse, message, Progress } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
 
 interface ChatMsg {
@@ -8,6 +8,61 @@ interface ChatMsg {
   tree?: any;
   error?: string;
   loading?: boolean;
+}
+
+const STEPS = [
+  { icon: '📋', text: '分析知识点清单', ms: 5000 },
+  { icon: '🧠', text: '理解学习目标', ms: 6000 },
+  { icon: '🗺', text: '规划学习阶段', ms: 8000 },
+  { icon: '📚', text: '匹配知识点关联', ms: 8000 },
+  { icon: '⚡', text: '优化路线结构', ms: 8000 },
+];
+
+function StepProgress({ startTime, done }: { startTime: number; done: boolean }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (done) return;
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [startTime, done]);
+
+  // 根据已用时间确定当前步骤
+  let acc = 0;
+  let currentStep = 0;
+  for (let i = 0; i < STEPS.length; i++) {
+    acc += STEPS[i].ms;
+    if (elapsed * 1000 < acc) { currentStep = i; break; }
+    currentStep = i + 1;
+  }
+
+  const pct = done ? 100 : Math.min(Math.floor((elapsed / 60) * 80), 80);
+  const activeStep = Math.min(currentStep, STEPS.length - 1);
+
+  return (
+    <div style={{ padding: '20px 16px' }}>
+      <div style={{ fontSize: 14, marginBottom: 12, color: done ? '#52c41a' : '#1677ff' }}>
+        {done ? '✅ 生成完成' : `${STEPS[activeStep].icon} AI 正在${STEPS[activeStep].text}...`}
+      </div>
+      <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 16 }}>
+        ⏱ 已用时 {elapsed} 秒 · 预计 30-60 秒
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+        {STEPS.map((step, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 13, color: done || i < currentStep ? '#52c41a' : i === currentStep ? '#1677ff' : '#bfbfbf',
+          }}>
+            <span style={{ width: 18, textAlign: 'center', fontSize: 12 }}>
+              {done || i < currentStep ? '✅' : i === currentStep ? '🔄' : '⏳'}
+            </span>
+            {step.text}
+          </div>
+        ))}
+      </div>
+      <Progress percent={pct} size="small" strokeColor={done ? '#52c41a' : '#1677ff'} />
+    </div>
+  );
 }
 
 export default function GenerateModal({
@@ -21,9 +76,11 @@ export default function GenerateModal({
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [genStartTime, setGenStartTime] = useState(0);
+  const [genDone, setGenDone] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, generating]);
 
   const send = async () => {
     if (!input.trim() || generating) return;
@@ -31,6 +88,9 @@ export default function GenerateModal({
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', loading: true }]);
     setGenerating(true);
+    setGenStartTime(Date.now());
+    setGenDone(false);
+
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -41,11 +101,15 @@ export default function GenerateModal({
         method: 'POST', headers, body: JSON.stringify(payload),
       });
       const d = await r.json();
+      setGenDone(true);
+      setTimeout(() => setGenerating(false), 600);
       if (!r.ok) throw new Error(d.message || '生成失败');
       setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', tree: d.tree }]);
     } catch (e: any) {
+      setGenDone(true);
+      setTimeout(() => setGenerating(false), 400);
       setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', error: e.message }]);
-    } finally { setGenerating(false); }
+    }
   };
 
   const save = async (tree: any) => {
@@ -70,7 +134,7 @@ export default function GenerateModal({
       open={open} onCancel={() => { onClose(); setMessages([]); }}
       title="🤖 AI 定制学习路线" width={680} footer={null}
     >
-      <div style={{ height: 400, overflowY: 'auto', marginBottom: 12, padding: '0 4px' }}>
+      <div style={{ height: 420, overflowY: 'auto', marginBottom: 12, padding: '0 4px' }}>
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', paddingTop: 100, color: '#8c8c8c' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🗺</div>
@@ -88,7 +152,9 @@ export default function GenerateModal({
                 borderRadius: '12px 12px 2px 12px', maxWidth: '70%', fontSize: 13,
               }}>{m.content}</div>
             ) : m.loading ? (
-              <Spin />
+              <div style={{ width: '100%', background: '#fafafa', borderRadius: 12, border: '1px solid #e8e8e8' }}>
+                <StepProgress startTime={genStartTime} done={genDone} />
+              </div>
             ) : m.error ? (
               <div style={{ color: '#ff4d4f', fontSize: 13 }}>⚠ {m.error}</div>
             ) : m.tree ? (
@@ -101,7 +167,7 @@ export default function GenerateModal({
                     <Button size="small" type="primary" onClick={() => save(m.tree)}>💾 保存</Button>
                   </div>
                   {m.tree.summary && <p style={{ color: '#8c8c8c', fontSize: 12 }}>{m.tree.summary}</p>}
-                  <Collapse size="small">
+                  <Collapse>
                     {(m.tree.stages || []).map((st: any, si: number) => (
                       <Collapse.Panel key={si} header={`阶段 ${si + 1} · ${st.title}`}>
                         {(st.items || []).map((it: any, ii: number) => (
@@ -124,10 +190,13 @@ export default function GenerateModal({
         <Input.TextArea
           value={input} onChange={e => setInput(e.target.value)}
           onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="输入学习目标…（Enter 发送）"
+          placeholder={generating ? 'AI 正在生成中…' : '输入学习目标…（Enter 发送，Shift+Enter 换行）'}
           autoSize={{ minRows: 1, maxRows: 3 }} disabled={generating}
         />
-        <Button type="primary" icon={<SendOutlined />} loading={generating} onClick={send}>发送</Button>
+        <Button type="primary" icon={<SendOutlined />} loading={generating} onClick={send}
+          disabled={!input.trim()}>
+          发送
+        </Button>
       </div>
     </Modal>
   );
