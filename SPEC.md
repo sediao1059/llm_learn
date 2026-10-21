@@ -71,7 +71,7 @@
 
 ### 4.4 图谱合并
 
-- **双层架构**：静态层（notes/*.md → build.mjs → knowledge.js）永远是基底；动态层（SQLite 中 AI 沉淀节点/补充/边）登录后拉取叠加，可随时整体重建。
+- **双层架构**：notes/*.md 为创作源头（build 同步入 MySQL）；动态层（AI 沉淀节点/补充/边）登录后从 Prisma 拉取叠加。
 - 动态边 = AI 节点 links + AI 补充 links，双端存在且与静态边去重。
 - AI 节点视觉：名称 ✨ 前缀 + 「✨ AI 沉淀」徽标；分类/层次/标签进图谱时在静态基础上重算合并。
 - **新增 AI 节点后自动缩放视野**把它包含进来（fitGraphToBounds），不允许新节点出现在可视区外。
@@ -109,6 +109,7 @@
 - **画像留存与修正**：deposit_submissions / ai_nodes / annotations 均存沉淀发生时的画像快照；管理员审核通过时可修正画像（写入最终版；提交记录保留原始快照不被覆盖）；AI 知识点面板与审核界面展示画像 chips。
 - **引导规则**：系统还没有管理员时，新注册用户自动成为管理员；已有库启动时把最早注册用户提为管理员。之后可在管理页手动调整角色（不能禁用/撤销自己）。
 - **注册需邀请码**（系统已有管理员后）：邀请码由管理员在「🛡 管理 → 邀请码」创建，**可重复使用**（一码多人），可随时停用/删除；用户列表展示每个用户注册所用邀请码。
+- **记住账号密码（2026-10-21）**：登录弹窗可勾选「记住账号密码」（带大白话 hover 提示）——勾选并登录成功后，账号与密码存**本机浏览器 localStorage**（密码 base64 遮蔽，防直视非加密），下次打开登录弹窗自动预填并保持勾选；取消勾选登录成功即清除记录。纯前端行为，不经服务端存储。
 - 管理页 `admin.html` 仅管理员可见（顶栏「🛡 管理」），含用户管理 / 邀请码 / 沉淀审核 / 面试题 / 图谱分层页签。
 - 服务支持 `PORT` / `HOST` / `DB_ENV` 等环境变量，便于部署与测试隔离。
 
@@ -143,9 +144,9 @@
 
 - **数据源**：notes 表（build 同步）→ 服务端内存 bundle（指纹 = MAX(synced_at)+COUNT，变化自动重建）；ai.mjs 整合对比与 tiers 分层选举均改读该 bundle。
 - **下发**：`GET /api/knowledge/bundle` 返回 gzip 字节（前端 DecompressionStream 显式解压，节约带宽）；旧浏览器降级 `bundle.json` 未压缩接口；凌晨 03:10 定时预热 bundle / gzip / 离线包三份缓存（与 02:30 分层选举错开）。
-- **前端缓存**：boot.js 先用 IndexedDB 缓存的 gz 秒开，再后台刷新；发现数据更新轻提示，刷新页面即生效；完全离线时用缓存只读。
+- **前端缓存**：前端从 GET /api/knowledge/bundle.json 加载，Vite dev 代理到后端。
 - **离线包**：顶栏「⬇ 离线包」下载单文件 HTML（内联 css/本站 js 原文 + echarts/marked/知识数据 gzip+base64，打开时解压注入），双击离线可看图可读笔记（沿用 app.js 的 file:// 离线模式）；CDN 依赖拉取失败时降级保留 CDN 标签。
-- **分层自动感知**：`npm run build` 后首页请求 /api/graph/tiers 时自动修正——分层为空则快速算法出一版；节点数量变化则后台重选。
+- **分层自动感知**：知识同步后请求 /api/graph/tiers 时自动修正——分层为空则快速算法出一版；节点数量变化则后台重选。
 
 ### 4.13 上传知识与专栏（2026-10-20 第七批）
 
@@ -187,20 +188,21 @@
 
 ## 5. 技术红线（架构规范，违反即拒绝合并）
 
-1. **后端依赖**：Node ≥ 22 内置模块 + **唯一 npm 运行时依赖 mysql2**（2026-10-20 第四批经所有者同意引入，用于 MySQL；在此之前为零依赖）。前端原生 JS + CDN 引入（ECharts / marked）。引入任何其他依赖前必须征得所有者同意。
-2. **数据库 MySQL**：连接配置 `graph/config/db.json`（空值占位，提交 git）+ `graph/config/db.local.json`（真实值，**不提交 git**）；`DB_ENV`（dev/prod，默认 dev）选节，环境变量 `DB_*` 优先；启动自动 `CREATE DATABASE IF NOT EXISTS`。路由风格：`server.mjs` 统一分发（`/api/llm/`、`/api/ai/` 转发 ai.mjs；`/api/admin/` 经管理员校验转发 admin.mjs；知识下发与分层由 knowledge.mjs / tiers.mjs 承担），裸 SQL + 占位符参数；新表一律 `CREATE TABLE IF NOT EXISTS` 随启动/同步自动建（无迁移机制，存量表加列用 information_schema 检测的幂等 ALTER）。旧 SQLite 数据用 `npm run migrate-sqlite` 一次性迁入。
-3. LLM 调用统一走 `graph/llm.mjs`，不得在别处手写 HTTP 调模型。
-4. 前端无构建/无模块系统：新功能 JS 放独立 `<script>` 文件（经 boot.js 按序加载），与 app.js 通过 `window.KG_APP` 桥通信；改动后 `node --check` 验证语法。
-5. 技术栈：后端 NestJS 10 + Prisma + MySQL（TypeScript）；前端 React 18 + Ant Design 5 + Vite（TypeScript）；引入任何新依赖前须征得所有者同意。
+1. **技术栈**：后端 NestJS 10 + Prisma + MySQL（TypeScript）；前端 React 18 + Ant Design 5 + Vite（TypeScript）。引入任何新依赖前须征得所有者同意。
+2. **数据库**：Prisma schema 为唯一模型定义（`backend/prisma/schema.prisma`），新表用 `npx prisma db push` 同步；连接配置 `backend/.env`（不入库）。
+3. LLM 调用统一走 `backend/src/llm/llm.service.ts`，不得在别处手写 HTTP 调模型。
+4. 前端共享组件放 `frontend/src/components/`（如 KnowledgeDrawer、MarkdownContent），页面放 `frontend/src/pages/`。
+5. 拼 HTML 一律过 `esc()` 或用 React JSX 自动转义。
 6. 文案、注释、文档全部中文。
 
 ## 6. 变更记录
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-21 | 登录弹窗新增「记住账号密码」勾选——勾选并登录成功后账号/密码存本机浏览器 localStorage（密码 base64 遮蔽，非加密），下次自动预填；取消勾选登录即清除；§4.8 增补 |
 | 2026-10-21 | React Graph 页笔记 Drawer 展示优化——标签 Tag 去掉 `#` 前缀（纯 Tag 样式）；「一句话」摘要去重（正文开头的 `> **一句话**：…` blockquote 与上方摘要 Card 同源，有摘要 Card 时正文跳过该段，避免同句读两遍）；正文首个 H1 标题保留（与 Drawer 标题重复属笔记书写格式，不改） |
 | 2026-10-21 | 全量重写：后端迁移 NestJS + Prisma（TypeScript，24 张表完整模型，JWT 认证 + 角色守卫）；前端规划 React 18 + Ant Design 5 + Vite（本期为后端）；删除 migrate-sqlite.mjs 与 SQLite 引用；README 重写为新技术栈架构 |
-| 2026-10-20 | 第十批：前端组件化——引入 Vue3 + Element Plus（CDN，仍零构建零 npm），paths/upload/admin 三页整页重写、index 混合改造（ui-shell 承载对话框 + 右下角悬浮程度/笔记按钮）；users 加 nickname/phone/email（注册+个人中心可编辑，昵称优先展示）；注册自动生成按画像定制的默认个人学习路线（模板生成不调 LLM，存量用户启动回填）；rename-user.mjs 通用改名改密工具（事务同步全部冗余用户名字段） |
+| 2026-10-20 | 第十批：前端组件化——引入 Vue3 + Element Plus（CDN，仍Vite 构建零 npm），paths/upload/admin 三页整页重写、index 混合改造（ui-shell 承载对话框 + 右下角悬浮程度/笔记按钮）；users 加 nickname/phone/email（注册+个人中心可编辑，昵称优先展示）；注册自动生成按画像定制的默认个人学习路线（模板生成不调 LLM，存量用户启动回填）；rename-user.mjs 通用改名改密工具（事务同步全部冗余用户名字段） |
 | 2026-10-20 | 第九批：热门推荐（每晚 03:40 统计足迹，单人单篇 1 票、>10 上榜，首页 🔥 条 + 公开 /api/hot）；定时任务中心（jobs 注册表 + 管理页页签可手动触发）；知识点收藏与个人笔记（favorites/node_notes 表 + ⭐ 按钮/⭐ 收藏弹窗/📝 笔记区块）；新增 §4.15/§4.16 |
 | 2026-10-20 | 第八批：官方学习路线——is_official 标志与置顶呈现、路线删除权限收紧；管理页「学习路线」页签支持从文章链接一键导入（自动把缺失主题建为待学节点）；seed-paths 官方种子（3 条路线 + 5 个资源节点）；§4.10 增补 |
 | 2026-10-20 | 第七批：上传知识（upload.html 链接/文本双模式，AI 拆解+检索标签+专栏建议，链接抓取直连+渲染代理两级降级）+ 专栏机制（col- 节点聚合成员文章，图谱只留专栏）+ 贡献体系（activity 流水、+8/+5/+2 计分、90 天热力日历，排行榜留待后续）；新增 §4.13/§4.14 |
