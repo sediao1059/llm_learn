@@ -16,6 +16,7 @@ import { TiersModule } from './tiers/tiers.module';
 import { HotModule } from './hot/hot.module';
 import { JobsModule } from './jobs/jobs.module';
 import { VersionsModule } from './versions/versions.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { VersionsModule } from './versions/versions.module';
     HotModule,
     JobsModule,
     VersionsModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

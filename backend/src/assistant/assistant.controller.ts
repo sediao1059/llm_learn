@@ -152,6 +152,16 @@ export class AssistantController {
         send('result', {
           userMessageId: um.id, messageId: am.id, title: newTitle,
         });
+        // 记录 LLM 用量（token 按文本长度/4 粗估）
+        const promptTokens = Math.ceil((content.length + (system?.length || 0)) / 4);
+        const outputTokens = Math.ceil(r.text.length / 4);
+        this.prisma.llmUsage.create({
+          data: {
+            userId: user.id, username: user.username,
+            chatId, modelName: model.name || model.modelId,
+            promptTokens, outputTokens,
+          },
+        }).catch(() => {});
       }
     } catch (e: any) {
       send('error', { error: String(e?.message || e) });

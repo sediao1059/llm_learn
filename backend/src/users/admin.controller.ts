@@ -19,8 +19,15 @@ export class AdminUsersController {
   async list() {
     const rows = await this.prisma.user.findMany({
       orderBy: { id: 'asc' },
-      include: { sessions: { select: { token: true } } },
     });
+    // 汇总每个用户的 LLM 用量
+    const usage = await this.prisma.llmUsage.groupBy({
+      by: ['username'],
+      _count: { id: true },
+      _sum: { promptTokens: true, outputTokens: true },
+      _max: { createdAt: true },
+    });
+    const usageMap = new Map(usage.map(u => [u.username, u]));
     const invites = await this.prisma.inviteCode.findMany();
     const invMap = new Map(invites.map(i => [i.id, i.code]));
     return {
@@ -31,6 +38,16 @@ export class AdminUsersController {
         createdAt: u.createdAt,
         inviteCode: invMap.get(u.inviteCodeId || 0) || '',
         profileTags: this.parseTags(u.profileTags),
+        ...((() => {
+          const stat = usageMap.get(u.username);
+          return stat ? {
+            totalChats: stat._count.id,
+            totalTokens: (stat._sum.promptTokens || 0) + (stat._sum.outputTokens || 0),
+            lastActive: stat._max.createdAt,
+          } : {
+            totalChats: 0, totalTokens: 0, lastActive: null,
+          };
+        })()),
       })),
     };
   }

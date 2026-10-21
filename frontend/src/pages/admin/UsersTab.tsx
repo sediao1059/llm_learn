@@ -42,6 +42,11 @@ export default function UsersTab() {
     )},
     { title: '角色', dataIndex: 'role', width: 90, render: (v: string) =>
       v === 'admin' ? <Tag color="success">🛡 管理员</Tag> : <Tag>普通用户</Tag> },
+    { title: '对话', dataIndex: 'totalChats', width: 60, render: (v: number) => v || 0 },
+    { title: 'Token', dataIndex: 'totalTokens', width: 80,
+      render: (v: number) => v ? (v > 999 ? `${(v / 1000).toFixed(1)}k` : v) : '0' },
+    { title: '最后活跃', dataIndex: 'lastActive', width: 120,
+      render: (v: string) => v ? new Date(v).toLocaleString('zh-CN', { hour12: false }).slice(5, 16) : '—' },
     { title: '画像', key: 'tags', width: 200, render: (_: any, r: any) => (
       <Space size={4} wrap>
         <Tag color={r.profileTags?.level === 'expert' ? 'warning' : 'success'}>
