@@ -377,3 +377,14 @@ model AppKv {
 
   @@map("app_kv")
 }
+
+// ========== 网站版本管理 ==========
+model Version {
+  id        Int      @id @default(autoincrement())
+  version   String   @unique @db.VarChar(20)
+  date      String   @db.VarChar(20)
+  changes   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("versions")
+}

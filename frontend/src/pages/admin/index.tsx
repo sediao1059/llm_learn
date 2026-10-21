@@ -6,6 +6,7 @@ import UploadsTab from './UploadsTab';
 import InterviewTab from './InterviewTab';
 import PathsTab from './PathsTab';
 import JobsTab from './JobsTab';
+import VersionsTab from './VersionsTab';
 
 export default function AdminPage() {
   return (
@@ -21,6 +22,7 @@ export default function AdminPage() {
             { key: 'interview', label: '面试题', children: <InterviewTab /> },
             { key: 'paths', label: '学习路线', children: <PathsTab /> },
             { key: 'jobs', label: '定时任务', children: <JobsTab /> },
+            { key: 'versions', label: '版本管理', children: <VersionsTab /> },
           ]}
         />
       </Card>
