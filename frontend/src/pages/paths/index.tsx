@@ -4,6 +4,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import TreeView from './TreeView';
 import GenerateModal from './GenerateModal';
 import ArticleDrawer from './ArticleDrawer';
+import { useAuth } from '../../store/auth';
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -19,6 +20,7 @@ function collectRouteRefIds(tree: any): string[] {
 }
 
 export default function PathsPage() {
+  const { user } = useAuth();
   const [paths, setPaths] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [refTitles, setRefTitles] = useState<Record<string, string>>({});
@@ -226,6 +228,8 @@ export default function PathsPage() {
           extending={extending}
           linkedNodes={linkedNodes}
           onOpenLinked={(refId) => setArticleNodeId(refId)}
+          userRole={user?.role || 'user'}
+          onAnnotationSaved={() => message.success('注释已保存')}
         />
       )}
 

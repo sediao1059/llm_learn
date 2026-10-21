@@ -130,6 +130,21 @@ export default function GraphPage() {
 
   const node = data?.nodes.find(n => n.id === selected) || aiData?.nodes?.find((n: any) => n.id === selected);
 
+  /**
+   * 摘要去重：笔记正文开头的「> **一句话**：…」blockquote 与上方摘要 Card 内容同源，
+   * 已有摘要 Card 时正文里跳过这一段，避免同一句话读两遍；无摘要或格式不符则原样渲染。
+   */
+  const stripLeadingOneliner = (content: string | undefined, summary?: string): string => {
+    if (!content || !summary) return content || '';
+    const lines = content.split('\n');
+    const start = lines.findIndex(l => l.trimStart().startsWith('>'));
+    if (start < 0 || !/^>\s*\*\*一句话\*\*\s*[:：]/.test(lines[start])) return content;
+    let end = start;
+    while (end < lines.length && lines[end].trimStart().startsWith('>')) end++;
+    if (lines[end] && !lines[end].trim()) end++; // 连带吞掉紧跟的空行，保持间距
+    return lines.slice(0, start).concat(lines.slice(end)).join('\n');
+  };
+
   // 划词检测
   const handleMouseUp = useCallback(() => {
     if (!user || !noteOpen) { setSelectionPos(null); return; }
@@ -185,9 +200,9 @@ export default function GraphPage() {
               <Card size="small" style={{ marginBottom: 12, background: '#f6f6f6' }}>{node.summary}</Card>
             )}
             {node.tags?.length > 0 && (
-              <div style={{ marginBottom: 12 }}>{node.tags.map((t: string) => <Tag key={t}>#{t}</Tag>)}</div>
+              <div style={{ marginBottom: 12 }}>{node.tags.map((t: string) => <Tag key={t}>{t}</Tag>)}</div>
             )}
-            <MarkdownContent content={node.content || ''} />
+            <MarkdownContent content={stripLeadingOneliner(node.content, node.summary)} />
 
             {annotations.length > 0 && (
               <Card title={`💬 本篇注释（${annotations.length}）`} size="small" style={{ marginTop: 16 }}>

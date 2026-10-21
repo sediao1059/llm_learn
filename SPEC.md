@@ -198,6 +198,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-21 | React Graph 页笔记 Drawer 展示优化——标签 Tag 去掉 `#` 前缀（纯 Tag 样式）；「一句话」摘要去重（正文开头的 `> **一句话**：…` blockquote 与上方摘要 Card 同源，有摘要 Card 时正文跳过该段，避免同句读两遍）；正文首个 H1 标题保留（与 Drawer 标题重复属笔记书写格式，不改） |
 | 2026-10-21 | 全量重写：后端迁移 NestJS + Prisma（TypeScript，24 张表完整模型，JWT 认证 + 角色守卫）；前端规划 React 18 + Ant Design 5 + Vite（本期为后端）；删除 migrate-sqlite.mjs 与 SQLite 引用；README 重写为新技术栈架构 |
 | 2026-10-20 | 第十批：前端组件化——引入 Vue3 + Element Plus（CDN，仍零构建零 npm），paths/upload/admin 三页整页重写、index 混合改造（ui-shell 承载对话框 + 右下角悬浮程度/笔记按钮）；users 加 nickname/phone/email（注册+个人中心可编辑，昵称优先展示）；注册自动生成按画像定制的默认个人学习路线（模板生成不调 LLM，存量用户启动回填）；rename-user.mjs 通用改名改密工具（事务同步全部冗余用户名字段） |
 | 2026-10-20 | 第九批：热门推荐（每晚 03:40 统计足迹，单人单篇 1 票、>10 上榜，首页 🔥 条 + 公开 /api/hot）；定时任务中心（jobs 注册表 + 管理页页签可手动触发）；知识点收藏与个人笔记（favorites/node_notes 表 + ⭐ 按钮/⭐ 收藏弹窗/📝 笔记区块）；新增 §4.15/§4.16 |
