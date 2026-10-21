@@ -34,7 +34,7 @@ export class AdminUsersController {
       users: rows.map(u => ({
         id: u.id, username: u.username, nickname: u.nickname || '',
         phone: u.phone || '', email: u.email || '',
-        role: u.role, status: u.status,
+        role: u.role, status: u.status, llmBanned: !!u.llmBanned,
         createdAt: u.createdAt,
         inviteCode: invMap.get(u.inviteCodeId || 0) || '',
         profileTags: this.parseTags(u.profileTags),
@@ -65,7 +65,14 @@ export class AdminUsersController {
     if (body.profileTags !== undefined) {
       profileTags = JSON.stringify(normalizeProfileTags(body.profileTags));
     }
-    await this.prisma.user.update({ where: { id }, data: { role, status, profileTags } });
+    const llmBanned = body.llmBanned !== undefined ? (body.llmBanned ? 1 : 0) : undefined;
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        role, status, profileTags,
+        ...(llmBanned !== undefined ? { llmBanned } : {}),
+      },
+    });
     if (status === 'disabled') {
       await this.prisma.session.deleteMany({ where: { userId: id } });
     }

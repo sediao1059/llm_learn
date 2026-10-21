@@ -5,6 +5,7 @@ import {
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
 
@@ -20,7 +21,7 @@ const LEVEL_PROMPTS: Record<string, string> = {
 };
 
 @Controller('ai/chats')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, LlmBanGuard)
 export class AssistantController {
   constructor(
     private prisma: PrismaService,

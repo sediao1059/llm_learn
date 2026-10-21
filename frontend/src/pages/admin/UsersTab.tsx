@@ -61,6 +61,8 @@ export default function UsersTab() {
       <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '—'}</span> },
     { title: '状态', dataIndex: 'status', width: 70, render: (v: string) =>
       v === 'enabled' ? <Tag color="success">启用</Tag> : <Tag color="error">禁用</Tag> },
+    { title: 'AI', dataIndex: 'llmBanned', width: 50, render: (v: boolean) =>
+      v ? <Tag color="error">🚫</Tag> : <Tag color="success">✓</Tag> },
     { title: '操作', key: 'ops', width: 200, render: (_: any, r: any) => (
       <Space size={4}>
         <Button onClick={() => {
@@ -69,8 +71,14 @@ export default function UsersTab() {
         }}>画像</Button>
         <Popconfirm title={`确定${r.status === 'enabled' ? '禁用' : '启用'}「${r.username}」？`}
           onConfirm={() => patch(r.id, { status: r.status === 'enabled' ? 'disabled' : 'enabled' })}>
-          <Button danger={r.status === 'enabled'}>
+          <Button size="small" danger={r.status === 'enabled'}>
             {r.status === 'enabled' ? '禁用' : '启用'}
+          </Button>
+        </Popconfirm>
+        <Popconfirm title={`${r.llmBanned ? '恢复' : '禁止'}「${r.username}」使用 AI 功能？${r.llmBanned ? '' : '（不影响浏览知识图谱）'}`}
+          onConfirm={() => patch(r.id, { llmBanned: !r.llmBanned })}>
+          <Button size="small" danger={!r.llmBanned}>
+            {r.llmBanned ? '恢复AI' : '禁AI'}
           </Button>
         </Popconfirm>
         {r.role !== 'admin' ? (

@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { Res } from '@nestjs/common';
 import { normalizeProfileTags } from '../auth/profile-tags.util';
@@ -10,7 +11,7 @@ import { normalizeProfileTags } from '../auth/profile-tags.util';
 const ANNO_TYPES = ['word', 'sentence', 'paragraph', 'document', 'interview'];
 
 @Controller('ai/annotations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, LlmBanGuard)
 export class AnnotationsController {
   constructor(private prisma: PrismaService) {}
 

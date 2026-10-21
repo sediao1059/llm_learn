@@ -32,6 +32,7 @@ export class JwtAuthGuard implements CanActivate {
       email: session.user.email || '',
       role: session.user.role,
       status: session.user.status,
+      llmBanned: !!session.user.llmBanned,
       profileTags: this.parseProfileTags(session.user.profileTags),
     };
     return true;

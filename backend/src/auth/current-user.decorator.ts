@@ -8,6 +8,7 @@ export interface CurrentUserType {
   email: string;
   role: string;
   status: string;
+  llmBanned: boolean;
   profileTags: { level: string; focus: string[] };
 }
 

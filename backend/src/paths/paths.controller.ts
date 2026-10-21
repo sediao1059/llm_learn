@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
@@ -16,7 +17,7 @@ const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师�
 严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":"","children":[]}]}]}`;
 
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, LlmBanGuard)
 export class PathsController {
   constructor(
     private prisma: PrismaService,
