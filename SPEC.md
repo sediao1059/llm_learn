@@ -180,13 +180,14 @@
 2. **数据库 MySQL**：连接配置 `graph/config/db.json`（空值占位，提交 git）+ `graph/config/db.local.json`（真实值，**不提交 git**）；`DB_ENV`（dev/prod，默认 dev）选节，环境变量 `DB_*` 优先；启动自动 `CREATE DATABASE IF NOT EXISTS`。路由风格：`server.mjs` 统一分发（`/api/llm/`、`/api/ai/` 转发 ai.mjs；`/api/admin/` 经管理员校验转发 admin.mjs；知识下发与分层由 knowledge.mjs / tiers.mjs 承担），裸 SQL + 占位符参数；新表一律 `CREATE TABLE IF NOT EXISTS` 随启动/同步自动建（无迁移机制，存量表加列用 information_schema 检测的幂等 ALTER）。旧 SQLite 数据用 `npm run migrate-sqlite` 一次性迁入。
 3. LLM 调用统一走 `graph/llm.mjs`，不得在别处手写 HTTP 调模型。
 4. 前端无构建/无模块系统：新功能 JS 放独立 `<script>` 文件（经 boot.js 按序加载），与 app.js 通过 `window.KG_APP` 桥通信；改动后 `node --check` 验证语法。
-5. 前端组件库：Vue3 + Element Plus（CDN 引入零构建）——paths/upload/admin 整页 Vue、index 混合（图谱/面板/助手原生 + ui-shell Vue 对话框）；拼 HTML 一律过 `esc()` 转义；图谱区配色沿用浅色主题 token。
+5. 技术栈：后端 NestJS 10 + Prisma + MySQL（TypeScript）；前端 React 18 + Ant Design 5 + Vite（TypeScript）；引入任何新依赖前须征得所有者同意。
 6. 文案、注释、文档全部中文。
 
 ## 6. 变更记录
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-21 | 全量重写：后端迁移 NestJS + Prisma（TypeScript，24 张表完整模型，JWT 认证 + 角色守卫）；前端规划 React 18 + Ant Design 5 + Vite（本期为后端）；删除 migrate-sqlite.mjs 与 SQLite 引用；README 重写为新技术栈架构 |
 | 2026-10-20 | 第十批：前端组件化——引入 Vue3 + Element Plus（CDN，仍零构建零 npm），paths/upload/admin 三页整页重写、index 混合改造（ui-shell 承载对话框 + 右下角悬浮程度/笔记按钮）；users 加 nickname/phone/email（注册+个人中心可编辑，昵称优先展示）；注册自动生成按画像定制的默认个人学习路线（模板生成不调 LLM，存量用户启动回填）；rename-user.mjs 通用改名改密工具（事务同步全部冗余用户名字段） |
 | 2026-10-20 | 第九批：热门推荐（每晚 03:40 统计足迹，单人单篇 1 票、>10 上榜，首页 🔥 条 + 公开 /api/hot）；定时任务中心（jobs 注册表 + 管理页页签可手动触发）；知识点收藏与个人笔记（favorites/node_notes 表 + ⭐ 按钮/⭐ 收藏弹窗/📝 笔记区块）；新增 §4.15/§4.16 |
 | 2026-10-20 | 第八批：官方学习路线——is_official 标志与置顶呈现、路线删除权限收紧；管理页「学习路线」页签支持从文章链接一键导入（自动把缺失主题建为待学节点）；seed-paths 官方种子（3 条路线 + 5 个资源节点）；§4.10 增补 |

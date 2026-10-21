@@ -1,0 +1,379 @@
+// LLM 学习知识图谱 · Prisma Schema
+// 24 张表完整模型，列名与现有 MySQL 精确对齐（prisma db push 幂等不丢数据）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== 用户体系 ==========
+
+model User {
+  id           Int        @id @default(autoincrement())
+  username     String     @unique @db.VarChar(40)
+  passwordHash String     @map("password_hash") @db.VarChar(200)
+  salt         String     @db.VarChar(50)
+  role         String     @default("user") @db.VarChar(10)
+  status       String     @default("enabled") @db.VarChar(10)
+  inviteCodeId Int?       @map("invite_code_id")
+  profileTags  String     @default("{}") @map("profile_tags") @db.VarChar(1000)
+  nickname     String     @default("") @db.VarChar(60)
+  phone        String     @default("") @db.VarChar(20)
+  email        String     @default("") @db.VarChar(120)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+
+  sessions        Session[]
+  progresses      Progress[]
+  viewHistories   ViewHistory[]
+  graphExpansions GraphExpansion[]
+  favorites       Favorite[]
+  nodeNotes       NodeNote[]
+
+  @@map("users")
+}
+
+model Session {
+  token     String   @id @db.VarChar(255)
+  userId    Int      @map("user_id")
+  expiresAt BigInt   @map("expires_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Progress {
+  userId    Int      @map("user_id")
+  nodeId    String   @map("node_id") @db.VarChar(120)
+  level     Int      @default(0)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, nodeId])
+  @@map("progress")
+}
+
+model ViewHistory {
+  id           BigInt   @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  nodeId       String   @map("node_id") @db.VarChar(120)
+  count        Int      @default(1)
+  lastViewedAt DateTime @default(now()) @map("last_viewed_at") @db.DateTime(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nodeId])
+  @@map("view_history")
+}
+
+model InviteCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(40)
+  note      String   @default("") @db.VarChar(200)
+  status    String   @default("enabled") @db.VarChar(10)
+  useCount  Int      @default(0) @map("use_count")
+  createdBy String?  @map("created_by") @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@map("invite_codes")
+}
+
+model GraphExpansion {
+  userId     Int      @map("user_id")
+  nodeId     String   @map("node_id") @db.VarChar(120)
+  expandedAt DateTime @default(now()) @map("expanded_at") @db.DateTime(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, nodeId])
+  @@map("graph_expansions")
+}
+
+model Favorite {
+  userId    Int      @map("user_id")
+  nodeId    String   @map("node_id") @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, nodeId])
+  @@map("favorites")
+}
+
+model NodeNote {
+  userId    Int      @map("user_id")
+  nodeId    String   @map("node_id") @db.VarChar(120)
+  content   String?  @db.MediumText
+  updatedAt DateTime @default(now()) @map("updated_at") @db.DateTime(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, nodeId])
+  @@map("node_notes")
+}
+
+// ========== 知识库 ==========
+
+model Note {
+  id         String   @id @db.VarChar(120)
+  title      String   @db.VarChar(200)
+  category   String   @default("未分类") @db.VarChar(60)
+  layer      String   @default("未分层") @db.VarChar(40)
+  path       String   @default("") @db.VarChar(10)
+  route      String   @default("") @db.VarChar(160)
+  difficulty String   @default("未标注") @db.VarChar(10)
+  status     String   @default("learned") @db.VarChar(10)
+  tags       String   @default("[]") @db.VarChar(1000)
+  links      String   @default("[]") @db.VarChar(1000)
+  sources    String   @default("[]") @db.VarChar(2000)
+  file       String   @default("") @db.VarChar(255)
+  updatedAt  String   @default("") @map("updated_at") @db.VarChar(20)
+  summary    String   @default("") @db.VarChar(600)
+  content    String?  @db.MediumText
+  syncedAt   DateTime @default(now()) @map("synced_at") @db.DateTime(3)
+
+  @@map("notes")
+}
+
+// ========== LLM 模型管理 ==========
+
+model LlmModel {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  protocol  String   @default("openai") @db.VarChar(20)
+  baseUrl   String   @map("base_url") @db.VarChar(255)
+  apiKey    String   @map("api_key") @db.VarChar(500)
+  modelId   String   @map("model_id") @db.VarChar(150)
+  maxTokens Int?     @map("max_tokens")
+  status    String   @default("enabled") @db.VarChar(10)
+  isGlobal  Int      @default(0) @map("is_global")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @updatedAt @db.DateTime(3)
+
+  @@map("llm_models")
+}
+
+// ========== AI 助手 ==========
+
+model AiChat {
+  id        Int      @id @default(autoincrement())
+  title     String   @default("新会话") @db.VarChar(120)
+  createdBy String?  @map("created_by") @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @updatedAt @db.DateTime(3)
+  messages  AiMessage[]
+
+  @@map("ai_chats")
+}
+
+model AiMessage {
+  id        Int      @id @default(autoincrement())
+  chatId    Int      @map("chat_id")
+  role      String   @db.VarChar(12)
+  content   String   @db.MediumText
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  chat      AiChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@map("ai_messages")
+}
+
+// ========== AI 知识节点与沉淀 ==========
+
+model AiNode {
+  id           String   @id @db.VarChar(120)
+  title        String   @db.VarChar(160)
+  category     String   @db.VarChar(60)
+  layer        String?  @db.VarChar(40)
+  tags         String   @default("[]") @db.VarChar(1000)
+  status       String   @default("learned") @db.VarChar(10)
+  content      String   @db.MediumText
+  links        String   @default("[]") @db.VarChar(1000)
+  sourceChatId Int?     @map("source_chat_id")
+  createdBy    String?  @map("created_by") @db.VarChar(40)
+  submissionId Int?     @map("submission_id")
+  profileTags  String   @default("") @map("profile_tags") @db.VarChar(1000)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime @default(now()) @map("updated_at") @updatedAt @db.DateTime(3)
+
+  @@map("ai_nodes")
+}
+
+model AiMerge {
+  id           Int      @id @default(autoincrement())
+  targetNodeId String   @map("target_node_id") @db.VarChar(120)
+  content      String   @db.MediumText
+  links        String   @default("[]") @db.VarChar(1000)
+  sourceChatId Int?     @map("source_chat_id")
+  createdBy    String?  @map("created_by") @db.VarChar(40)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([targetNodeId])
+  @@map("ai_merges")
+}
+
+model DepositSubmission {
+  id           Int      @id @default(autoincrement())
+  chatId       Int?     @map("chat_id")
+  questionId   Int?     @map("question_id")
+  answerId     Int?     @map("answer_id")
+  questionText String   @map("question_text") @db.MediumText
+  answerText   String   @map("answer_text") @db.MediumText
+  importance   Int      @default(3)
+  articleNote  String   @default("") @map("article_note") @db.VarChar(200)
+  reviewNote   String   @default("") @map("review_note") @db.VarChar(1000)
+  status       String   @default("pending") @db.VarChar(10)
+  submittedBy  String?  @map("submitted_by") @db.VarChar(40)
+  profileTags  String   @default("") @map("profile_tags") @db.VarChar(1000)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  decidedAt    DateTime? @map("decided_at") @db.DateTime(3)
+  decidedBy    String?  @map("decided_by") @db.VarChar(40)
+  rejectReason String?  @map("reject_reason") @db.VarChar(500)
+  resultNodeId String?  @map("result_node_id") @db.VarChar(120)
+
+  @@index([status])
+  @@map("deposit_submissions")
+}
+
+model AiReview {
+  id        Int      @id @default(autoincrement())
+  nodeId    String   @map("node_id") @db.VarChar(120)
+  reviewer  String   @map("reviewer") @db.VarChar(40)
+  verdict   String   @db.VarChar(10)
+  note      String   @default("") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([nodeId])
+  @@map("ai_reviews")
+}
+
+// ========== 学习路线 ==========
+
+model LearningPath {
+  id         Int      @id @default(autoincrement())
+  title      String   @db.VarChar(120)
+  goal       String   @default("") @db.VarChar(600)
+  tree       String   @db.LongText
+  isOfficial Int      @default(0) @map("is_official")
+  createdBy  String?  @map("created_by") @db.VarChar(40)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@map("learning_paths")
+}
+
+// ========== 划词注释 ==========
+
+model Annotation {
+  id               Int      @id @default(autoincrement())
+  nodeId           String   @map("node_id") @db.VarChar(120)
+  anchorText       String   @map("anchor_text") @db.VarChar(2000)
+  anchorContext    String   @default("") @map("anchor_context") @db.VarChar(1000)
+  anchorIndex      Int      @default(0) @map("anchor_index")
+  type             String   @default("sentence") @db.VarChar(12)
+  question         String   @default("") @db.VarChar(1000)
+  answer           String   @db.MediumText
+  status           String   @default("pending") @db.VarChar(10)
+  profileTags      String   @default("") @map("profile_tags") @db.VarChar(1000)
+  rejectReason     String?  @map("reject_reason") @db.VarChar(500)
+  createdBy        String?  @map("created_by") @db.VarChar(40)
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  decidedAt        DateTime? @map("decided_at") @db.DateTime(3)
+  decidedBy        String?  @map("decided_by") @db.VarChar(40)
+
+  @@index([nodeId])
+  @@index([status])
+  @@map("annotations")
+}
+
+// ========== 上传知识 ==========
+
+model Upload {
+  id                 Int      @id @default(autoincrement())
+  kind               String   @db.VarChar(10)
+  sourceUrl          String   @default("") @map("source_url") @db.VarChar(600)
+  rawText            String?  @map("raw_text") @db.MediumText
+  note               String   @default("") @db.VarChar(500)
+  title              String   @default("") @db.VarChar(300)
+  submittedBy        String   @map("submitted_by") @db.VarChar(40)
+  profileTags        String   @default("") @map("profile_tags") @db.VarChar(1000)
+  status             String   @default("extracting") @db.VarChar(16)
+  errorMsg           String?  @map("error_msg") @db.VarChar(500)
+  collectionMode     String   @default("new") @map("collection_mode") @db.VarChar(8)
+  collectionTitle    String   @default("") @map("collection_title") @db.VarChar(200)
+  collectionSummary  String   @default("") @map("collection_summary") @db.VarChar(600)
+  collectionMergeId  String?  @map("collection_merge_id") @db.VarChar(120)
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  decidedAt          DateTime? @map("decided_at") @db.DateTime(3)
+  decidedBy          String?  @map("decided_by") @db.VarChar(40)
+  rejectReason       String?  @map("reject_reason") @db.VarChar(500)
+  items              UploadItem[]
+
+  @@index([status])
+  @@index([submittedBy])
+  @@map("uploads")
+}
+
+model UploadItem {
+  id       Int    @id @default(autoincrement())
+  uploadId Int    @map("upload_id")
+  seq      Int    @default(0)
+  title    String @db.VarChar(200)
+  content  String @db.MediumText
+  tags     String @default("[]") @db.VarChar(1000)
+  links    String @default("[]") @db.VarChar(1000)
+  upload   Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@map("upload_items")
+}
+
+model CollectionItem {
+  id               Int      @id @default(autoincrement())
+  collectionNodeId String   @map("collection_node_id") @db.VarChar(120)
+  title            String   @db.VarChar(200)
+  content          String   @db.MediumText
+  tags             String   @default("[]") @db.VarChar(1000)
+  links            String   @default("[]") @db.VarChar(1000)
+  sourceUploadId   Int?     @map("source_upload_id")
+  createdBy        String   @map("created_by") @db.VarChar(40)
+  profileTags      String   @default("") @map("profile_tags") @db.VarChar(1000)
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([collectionNodeId])
+  @@map("collection_items")
+}
+
+// ========== 贡献体系 ==========
+
+model Activity {
+  id        BigInt   @id @default(autoincrement())
+  userName  String   @map("user_name") @db.VarChar(40)
+  kind      String   @db.VarChar(20)
+  points    Int      @default(0)
+  note      String   @default("") @db.VarChar(300)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([userName, createdAt])
+  @@map("activity")
+}
+
+// ========== 图谱分层 ==========
+
+model NodeTier {
+  nodeId     String   @id @map("node_id") @db.VarChar(120)
+  tier       Int
+  parentId   String?  @map("parent_id") @db.VarChar(120)
+  method     String?  @db.VarChar(20)
+  computedAt DateTime @default(now()) @map("computed_at") @db.DateTime(3)
+
+  @@map("node_tiers")
+}
+
+// ========== KV 存储 ==========
+
+model AppKv {
+  key   String @id @db.VarChar(100)
+  value String @db.VarChar(500)
+
+  @@map("app_kv")
+}

@@ -21,3 +21,12 @@ graph/config/db.local.json
 .idea/
 .vscode/
 *.swp
+
+# NestJS backend
+backend/.env
+backend/dist/
+backend/node_modules/
+
+# React frontend
+frontend/node_modules/
+frontend/dist/
