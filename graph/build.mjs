@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /**
- * 知识图谱构建脚本
- * 扫描 ../notes/ 下全部 markdown 笔记（含 frontmatter 元信息），
- * 生成 data/knowledge.js 供前端渲染（直接 <script> 引入，双击 index.html 也能用）。
+ * 知识库同步脚本（notes/*.md → MySQL notes 表）
+ * 扫描 ../notes/ 下全部 markdown 笔记（含 frontmatter 元信息），按 id 增量同步入库：
+ * 新增/更新 upsert，库中已不存在于文件系统的 id 删除。页面与后端的图谱数据均从 MySQL 读取。
  *
  * 用法：node build.mjs   （或 npm run build）
  */
-import { readdirSync, readFileSync, writeFileSync, statSync, mkdirSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
+import { initDb, closeDb, dbInfo } from './db.mjs';
+import { NOTES_DDL } from './knowledge.mjs';
+import { initAi } from './ai.mjs';
 
 const GRAPH_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(GRAPH_DIR, '..');
 const NOTES_DIR = join(ROOT, 'notes');
-const OUT_FILE = join(GRAPH_DIR, 'data', 'knowledge.js');
-const OUT_JSON = join(GRAPH_DIR, 'data', 'knowledge.json'); // 供 server.mjs（AI 知识点整合对比）读取
 
 function walk(dir) {
   let out = [];
@@ -58,11 +59,6 @@ function parseFm(text) {
   return out;
 }
 
-const warnings = [];
-const files = walk(NOTES_DIR).sort();
-const nodes = [];
-const seenIds = new Set();
-
 // 学习路线名称（path = 路线号.步骤号，见 docs/knowledge-dimensions-plan.md §5）
 const ROUTE_NAMES = {
   '1': '① 打底线（新手从这里开始）',
@@ -82,6 +78,33 @@ function extractSummary(content) {
     .trim()
     .slice(0, 140);
 }
+
+/**
+ * 拆出「## N. 高频面试题」章节：正文保留标题行、截掉章节体（只改入库展示层，不动 md 文件）。
+ * 章节体由 build 写成 system 面试题注释（type=interview），前端把标题渲染成可点击入口。
+ */
+function splitInterview(content) {
+  const m = content.match(/^##\s*\d*[.、]?\s*高频面试题\s*$/m);
+  if (!m) return { content, interview: null };
+  const start = m.index;
+  const heading = m[0];
+  const lineEnd = content.indexOf('\n', start);
+  const afterHeading = content.slice(lineEnd + 1);
+  // 章节体到下一个同级（h1/h2）标题为止
+  const next = afterHeading.match(/^#{1,2}\s/m);
+  const body = afterHeading.slice(0, next ? next.index : afterHeading.length).trim();
+  const after = next ? afterHeading.slice(next.index) : '';
+  const kept = (content.slice(0, start) + heading + '\n\n' + after)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { content: kept, interview: { heading: heading.replace(/^##\s*/, '').trim(), body } };
+}
+
+const warnings = [];
+const files = walk(NOTES_DIR).sort();
+const rows = [];
+const interviews = []; // { nodeId, heading, body }：面试题章节 → system 注释
+const seenIds = new Set();
 
 for (const file of files) {
   const rel = relative(ROOT, file).split('\\').join('/');
@@ -106,81 +129,88 @@ for (const file of files) {
     pathNum = '';
   }
 
-  nodes.push({
+  const rawContent = parsed ? parsed.content : raw.trim();
+  const split = splitInterview(rawContent);
+  if (split.interview && split.interview.body) {
+    interviews.push({ nodeId: id, heading: split.interview.heading, body: split.interview.body });
+  }
+
+  rows.push([
     id,
-    title: fm.title || stem,
-    category: fm.category || '未分类',
-    layer: fm.layer || '未分层',
-    path: pathNum,
+    String(fm.title || stem).slice(0, 200),
+    String(fm.category || '未分类').slice(0, 60),
+    String(fm.layer || '未分层').slice(0, 40),
+    pathNum,
     route,
-    difficulty: fm.difficulty || '未标注',
-    status: fm.status === 'todo' ? 'todo' : 'learned',
-    tags: Array.isArray(fm.tags) ? fm.tags : [],
-    links: Array.isArray(fm.links) ? fm.links : [],
-    sources: Array.isArray(fm.sources) ? fm.sources : [],
-    file: rel,
-    updatedAt: statSync(file).mtime.toISOString().slice(0, 10),
-    summary: extractSummary(parsed ? parsed.content : ''),
-    content: parsed ? parsed.content : raw.trim()
-  });
+    String(fm.difficulty || '未标注').slice(0, 10),
+    fm.status === 'todo' ? 'todo' : 'learned',
+    JSON.stringify(Array.isArray(fm.tags) ? fm.tags : []),
+    JSON.stringify(Array.isArray(fm.links) ? fm.links : []),
+    JSON.stringify(Array.isArray(fm.sources) ? fm.sources : []),
+    rel,
+    statSync(file).mtime.toISOString().slice(0, 10),
+    extractSummary(rawContent).slice(0, 500),
+    split.content
+  ]);
   if (!fm.layer) warnings.push(`${rel}: 未标注 layer（归入"未分层"）`);
   if (!fm.difficulty) warnings.push(`${rel}: 未标注 difficulty（入门/进阶/深入，判据见 docs/content-style-guide.md §5）`);
-  if (!nodes[nodes.length - 1].summary) {
+  if (!rows[rows.length - 1][13]) {
     warnings.push(`${rel}: 正文缺少「> **一句话**：…」大白话摘要（展示在图谱 tooltip 与笔记面板，见 docs/content-style-guide.md §2）`);
   }
 }
 
-const edgeKeys = new Set();
-const edges = [];
-for (const n of nodes) {
-  for (const t of n.links) {
-    if (!seenIds.has(t)) { warnings.push(`${n.file}: links 指向不存在的知识点 "${t}"（不生成连线）`); continue; }
-    const key = [n.id, t].sort().join('=>');
-    if (edgeKeys.has(key)) continue;
-    edgeKeys.add(key);
-    edges.push({ source: n.id, target: t });
-  }
+/* ---------- 同步入库 ---------- */
+const db = await initDb();
+console.log(`数据库：${dbInfo()}`);
+await db.exec(NOTES_DDL);
+
+const existingRows = await db.prepare('SELECT id FROM notes').all();
+const existing = new Set(existingRows.map(r => r.id));
+const removed = [...existing].filter(id => !seenIds.has(id));
+
+const upsert = await db.prepare(`
+  INSERT INTO notes(id, title, category, layer, path, route, difficulty, status, tags, links, sources, file, updated_at, summary, content, synced_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  ON DUPLICATE KEY UPDATE
+    title = VALUES(title), category = VALUES(category), layer = VALUES(layer), path = VALUES(path),
+    route = VALUES(route), difficulty = VALUES(difficulty), status = VALUES(status), tags = VALUES(tags),
+    links = VALUES(links), sources = VALUES(sources), file = VALUES(file), updated_at = VALUES(updated_at),
+    summary = VALUES(summary), content = VALUES(content), synced_at = NOW()
+`);
+for (const r of rows) await upsert.run(...r);
+
+if (removed.length) {
+  const del = await db.prepare('DELETE FROM notes WHERE id = ?');
+  for (const id of removed) await del.run(id);
 }
 
-const categories = [...new Set(nodes.map(n => n.category))];
-// 层列表：L 前缀字典序即 L1→L4，"未分层"（CJK）自然排最后
-const layers = [...new Set(nodes.map(n => n.layer))].sort((a, b) => a.localeCompare(b, 'en'));
-// 标签频次（供前端标签筛选条）
-const tagCount = {};
-for (const n of nodes) for (const t of n.tags) tagCount[t] = (tagCount[t] || 0) + 1;
-const allTags = Object.entries(tagCount)
-  .map(([tag, count]) => ({ tag, count }))
-  .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh'));
-
-// 学习路线：按路线号聚合、按步骤号排序（供路线视图）
-const routeMap = new Map();
-for (const n of nodes) {
-  if (!n.path) continue;
-  const prefix = n.path.split('.')[0];
-  if (!routeMap.has(prefix)) routeMap.set(prefix, []);
-  routeMap.get(prefix).push(n);
+/* ---------- 同步 system 面试题注释（幂等：有则更新、章节没了/笔记删了则删） ---------- */
+await initAi(db, {});
+const sysRows = await db.prepare(`SELECT id, node_id FROM annotations WHERE type = 'interview' AND created_by = 'system'`).all();
+const sysByNode = new Map(sysRows.map(r => [r.node_id, r.id]));
+const wantNodes = new Set(interviews.map(v => v.nodeId));
+const updAnno = await db.prepare('UPDATE annotations SET anchor_text = ?, answer = ?, created_at = NOW() WHERE id = ?');
+const insAnno = await db.prepare(`INSERT INTO annotations(node_id, anchor_text, anchor_context, anchor_index, type, question, answer, status, created_by)
+  VALUES (?, ?, '', 0, 'interview', '高频面试题（笔记原文提取）', ?, 'approved', 'system')`);
+const delAnno = await db.prepare('DELETE FROM annotations WHERE id = ?');
+for (const v of interviews) {
+  const oldId = sysByNode.get(v.nodeId);
+  if (oldId) await updAnno.run(v.heading, v.body, oldId);
+  else await insAnno.run(v.nodeId, v.heading, v.body);
 }
-const routes = [...routeMap.entries()]
-  .sort((a, b) => Number(a[0]) - Number(b[0]))
-  .map(([id, ns]) => ({
-    id,
-    name: ROUTE_NAMES[id] || ('路线 ' + id),
-    steps: ns.sort((a, b) => Number(a.path.split('.')[1]) - Number(b.path.split('.')[1])).map(n => n.id)
-  }));
+for (const [nodeId, annoId] of sysByNode) {
+  if (!wantNodes.has(nodeId)) await delAnno.run(annoId);
+}
 
-const payload = { generatedAt: new Date().toISOString(), categories, layers, allTags, routes, nodes, edges };
+const added = rows.filter(r => !existing.has(r[0])).length;
+console.log(`✔ 同步完成：共 ${rows.length} 篇笔记入库（新增 ${added}、更新 ${rows.length - added}、删除 ${removed.length}）`);
+console.log(`  面试题注释：${interviews.length} 篇从原文提取（system 注释）；缺的可在管理页「面试题」用 AI 一键补全`);
+if (removed.length) console.log(`  已删除：${removed.join('、')}`);
 
-mkdirSync(dirname(OUT_FILE), { recursive: true });
-const js =
-  '// 本文件由 graph/build.mjs 自动生成，请勿手改；新增笔记后重新运行 npm run build。\n' +
-  'window.KNOWLEDGE_DATA = ' + JSON.stringify(payload, null, 2).replace(/<\//g, '<\\/') + ';\n';
-writeFileSync(OUT_FILE, js);
-writeFileSync(OUT_JSON, JSON.stringify(payload));
-
-console.log(`✔ 构建完成：${nodes.length} 个知识点，${edges.length} 条关联，${categories.length} 个分类`);
-console.log(`  输出：${relative(ROOT, OUT_FILE)}、${relative(ROOT, OUT_JSON)}`);
 if (warnings.length) {
-  console.log('\n构建告警：');
+  console.log('\n同步告警：');
   warnings.forEach(w => console.log('  ⚠ ' + w));
   process.exitCode = 1;
 }
+console.log('\n提示：服务会在下次请求时自动感知变更并重建图谱缓存；首页大纲分层可在管理页「立即重算」。');
+await closeDb();
