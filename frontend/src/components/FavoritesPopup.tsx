@@ -48,7 +48,8 @@ export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: st
             locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有收藏，在笔记面板标题旁点 ☆ 收藏" /> }}
             renderItem={(r: any) => (
               <List.Item
-                style={{ cursor: 'pointer', padding: '7px 4px' }}
+                className="row-hover"
+                style={{ cursor: 'pointer', padding: '7px 8px' }}
                 onClick={() => { setOpen(false); onOpenNode(r.nodeId); }}
                 actions={[
                   <Tooltip key="del" title="取消收藏">

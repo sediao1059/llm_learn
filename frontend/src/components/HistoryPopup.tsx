@@ -39,7 +39,8 @@ export default function HistoryPopup({ onOpenNode }: { onOpenNode: (nodeId: stri
             locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有浏览记录，去图谱里点开笔记吧" /> }}
             renderItem={(r: any) => (
               <List.Item
-                style={{ cursor: 'pointer', padding: '7px 4px' }}
+                className="row-hover"
+                style={{ cursor: 'pointer', padding: '7px 8px' }}
                 onClick={() => go(r.nodeId)}
               >
                 <List.Item.Meta

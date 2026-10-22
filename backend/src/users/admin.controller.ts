@@ -36,6 +36,7 @@ export class AdminUsersController {
       users: rows.map(u => ({
         id: u.id, username: u.username, nickname: u.nickname || '',
         phone: u.phone || '', email: u.email || '',
+        remark: u.remark || '',
         role: u.role, status: u.status, llmBanned: !!u.llmBanned,
         isSuper: u.id === superId,
         createdAt: u.createdAt,
@@ -74,11 +75,16 @@ export class AdminUsersController {
       profileTags = JSON.stringify(normalizeProfileTags(body.profileTags));
     }
     const llmBanned = body.llmBanned !== undefined ? (body.llmBanned ? 1 : 0) : undefined;
+    // 管理员备注：仅此处（管理端）可读写，用户端任何接口不下发
+    const remark = body.remark !== undefined
+      ? (String(body.remark).trim().slice(0, 200) || null)
+      : undefined;
     await this.prisma.user.update({
       where: { id },
       data: {
         role, status, profileTags,
         ...(llmBanned !== undefined ? { llmBanned } : {}),
+        ...(remark !== undefined ? { remark } : {}),
       },
     });
     if (status === 'disabled') {

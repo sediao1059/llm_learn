@@ -25,6 +25,8 @@ model User {
   nickname     String     @default("") @db.VarChar(60)
   phone        String     @default("") @db.VarChar(20)
   email        String     @default("") @db.VarChar(120)
+  // 管理员给用户的备注（仅管理页可见/可编辑，不下发给用户端任何接口）
+  remark       String?    @db.VarChar(200)
   createdAt    DateTime   @default(now()) @map("created_at") @db.DateTime(3)
 
   sessions        Session[]

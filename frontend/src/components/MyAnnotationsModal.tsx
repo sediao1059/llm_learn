@@ -53,7 +53,7 @@ export default function MyAnnotationsModal({
         renderItem={(a: any) => {
           const st = STATUS_TAGS[a.status] || STATUS_TAGS.pending;
           return (
-            <List.Item style={{ cursor: 'pointer', padding: '8px 4px' }} onClick={() => go(a.nodeId)}>
+            <List.Item className="row-hover" style={{ cursor: 'pointer', padding: '8px 8px' }} onClick={() => go(a.nodeId)}>
               <List.Item.Meta
                 title={
                   <span style={{ fontSize: 13 }}>

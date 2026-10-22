@@ -15,6 +15,12 @@ const DIFFICULTY_OPTIONS = [
   { value: '未标注', label: '未标注（含 ✨ AI 沉淀）' },
 ];
 
+// 力导向基础参数 / 点选聚焦参数（SPEC §4.5）：聚焦时更短的边长把相关节点拉拢、
+// 更弱的斥力给它们匀出空间，无关节点同步缩小淡化，视觉上「被排斥退让」
+const BASE_FORCE = { repulsion: 480, edgeLength: 140, gravity: 0.08 };
+const FOCUS_FORCE = { repulsion: 240, edgeLength: 80, gravity: 0.05 };
+const baseNodeSize = (deg: number) => 30 + Math.min(deg * 7, 30);
+
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
@@ -112,6 +118,16 @@ export default function GraphPage() {
     }
     return { nodes, edges, categories };
   }, [data, aiData]);
+
+  // 节点大小按全量度数算，不随筛选变化跳尺寸
+  const degrees = useMemo(() => {
+    const deg: Record<string, number> = {};
+    for (const e of merged.edges) {
+      deg[e.source] = (deg[e.source] || 0) + 1;
+      deg[e.target] = (deg[e.target] || 0) + 1;
+    }
+    return deg;
+  }, [merged]);
 
   // 默认起点：全图度数最高（连线最多）的枢纽节点，随知识增长自动换
   const defaultRootId = useMemo(() => {
@@ -239,15 +255,62 @@ export default function GraphPage() {
     return () => { window.removeEventListener('resize', onResize); chart.current?.dispose(); };
   }, []);
 
+  /** 可见图谱的 series 数据（含点选聚焦样式，SPEC §4.5）：
+   *  选中节点红框高亮放大；一跳邻居保持原大小清晰可见；无关节点缩小淡化让位；
+   *  相关连线转红加粗、无关联线近乎隐没；聚焦时收紧 force 参数让相关节点聚拢铺开 */
+  const seriesData = useMemo(() => {
+    const focusId = selected && filtered.nodes.some((n: any) => n.id === selected) ? selected : null;
+    const neighbors = new Set<string>();
+    if (focusId) {
+      for (const e of filtered.edges) {
+        if (e.source === focusId) neighbors.add(e.target);
+        else if (e.target === focusId) neighbors.add(e.source);
+      }
+    }
+    // 孤岛节点（无邻居）只红框高亮自己，不全图淡化
+    const focusing = !!focusId && neighbors.size > 0;
+    const baseOf = (n: any) => ({
+      id: n.id, name: (n.ai ? '✨ ' : '') + n.title, value: n,
+      category: merged.categories.indexOf(n.category),
+      symbolSize: baseNodeSize(degrees[n.id] || 0),
+      itemStyle: { opacity: n.status === 'todo' ? 0.45 : 1 },
+    });
+    const data = filtered.nodes.map((n: any) => {
+      const base = baseOf(n);
+      if (!focusing) return base;
+      if (n.id === focusId) {
+        return { ...base, symbolSize: base.symbolSize + 6,
+          itemStyle: { opacity: 1, borderColor: '#ff4d4f', borderWidth: 3 } };
+      }
+      if (neighbors.has(n.id)) return base;
+      return {
+        ...base,
+        symbolSize: Math.max(10, Math.round(base.symbolSize * 0.45)),
+        itemStyle: { opacity: 0.12 },
+        label: { color: 'rgba(26,26,26,0.15)' },
+      };
+    });
+    const links = filtered.edges.map((e: any) => {
+      const hit = focusing && (e.source === focusId || e.target === focusId);
+      return {
+        source: e.source, target: e.target,
+        lineStyle: hit
+          ? { color: '#ff7875', width: 2.5, opacity: 0.85, curveness: 0.12 }
+          : { color: '#b3bac6', width: 1.5, opacity: focusing ? 0.06 : 0.6, curveness: 0.12 },
+      };
+    });
+    return { data, links, force: focusing ? FOCUS_FORCE : BASE_FORCE };
+  }, [merged, filtered, selected, degrees]);
+
+  // 主 setOption 重建（数据/筛选/图例变化）与点选聚焦更新共用上面这份样式：
+  // 重建走 ref 取「当前最新」样式（切筛选也能保持聚焦态，且不因 selected 变化触发整图重排）
+  const seriesRef = useRef(seriesData);
+  seriesRef.current = seriesData;
+
   useEffect(() => {
     if (!data || !chart.current) return;
     setLoading(false);
-    // 节点大小按全量度数算，不随筛选变化跳尺寸
-    const degrees: Record<string, number> = {};
-    for (const e of merged.edges) {
-      degrees[e.source] = (degrees[e.source] || 0) + 1;
-      degrees[e.target] = (degrees[e.target] || 0) + 1;
-    }
+    const s = seriesRef.current;
     chart.current.setOption({
       tooltip: {
         trigger: 'item',
@@ -281,22 +344,24 @@ export default function GraphPage() {
         // 刚打开时节点聚在屏幕中央，画布边缘空白处按住拖不动）
         type: 'graph', layout: 'force', roam: 'scale', draggable: true,
         categories: merged.categories.map((name: string) => ({ name })),
-        force: { repulsion: 480, edgeLength: 140, gravity: 0.08 },
+        force: s.force,
         label: { show: true, fontSize: 12, color: '#1a1a1a' },
         emphasis: { focus: 'adjacency' },
-        data: filtered.nodes.map(n => ({
-          id: n.id, name: (n.ai ? '✨ ' : '') + n.title,
-          symbolSize: 30 + Math.min((degrees[n.id] || 0) * 7, 30),
-          value: n, category: merged.categories.indexOf(n.category),
-          itemStyle: { opacity: n.status === 'todo' ? 0.45 : 1 },
-        })),
-        links: filtered.edges.map(e => ({
-          source: e.source, target: e.target,
-          lineStyle: { color: '#b3bac6', width: 1.5, opacity: 0.6, curveness: 0.12 },
-        })),
+        data: s.data,
+        links: s.links,
       }],
     }, true);
   }, [data, merged, filtered, legendSelected]);
+
+  // 点选聚焦：合并模式更新（按 id 合并、保留当前布局位置，force 模拟继续跑）——
+  // 选中后无关节点缩小淡化退让、相关节点被收紧的力参数拉拢聚拢并匀出空间；
+  // 关闭笔记浮窗（selected 置空）或点选其他节点时自动切换/全部还原
+  useEffect(() => {
+    if (!data || !chart.current) return;
+    const s = seriesRef.current;
+    chart.current.setOption({ series: [{ data: s.data, links: s.links, force: s.force }] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
 
   return (
     <div style={{ display: 'flex', position: 'relative', height: 'calc(100vh - 56px)' }}>

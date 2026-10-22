@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Tag, Drawer, Form, Select, Space, Popconfirm, Tooltip, message } from 'antd';
+import { Table, Button, Tag, Drawer, Form, Select, Space, Popconfirm, Tooltip, Modal, Input, message } from 'antd';
 import { useAuth } from '../../store/auth';
 
 const FOCUS = [
@@ -12,6 +12,9 @@ export default function UsersTab() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
+  // 管理员备注：仅本页可见/可编辑，用户端不下发
+  const [remarkUser, setRemarkUser] = useState<any>(null);
+  const [remarkText, setRemarkText] = useState('');
   const [form] = Form.useForm();
 
   const load = useCallback(() => {
@@ -40,6 +43,14 @@ export default function UsersTab() {
       <div>
         <b>{r.username}</b>
         {r.nickname && <span style={{ color: '#8c8c8c', marginLeft: 6, fontSize: 12 }}>{r.nickname}</span>}
+        {r.remark && (
+          <Tooltip title={r.remark}>
+            <div style={{ color: '#d46b08', fontSize: 12, marginTop: 2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
+              📝 {r.remark}
+            </div>
+          </Tooltip>
+        )}
       </div>
     )},
     { title: '角色', dataIndex: 'role', width: 110, render: (v: string, r: any) =>
@@ -73,6 +84,9 @@ export default function UsersTab() {
           setEditUser(r);
           form.setFieldsValue({ level: r.profileTags?.level, focus: r.profileTags?.focus || [] });
         }}>画像</Button>
+        <Button size="small" onClick={() => { setRemarkUser(r); setRemarkText(r.remark || ''); }}>
+          备注{r.remark ? '✏️' : ''}
+        </Button>
         <Popconfirm title={`确定${r.status === 'enabled' ? '禁用' : '启用'}「${r.username}」？`}
           onConfirm={() => patch(r.id, { status: r.status === 'enabled' ? 'disabled' : 'enabled' })}
           disabled={r.isSuper}>
@@ -139,6 +153,26 @@ export default function UsersTab() {
           </p>
         </Form>
       </Drawer>
+
+      {/* 管理员备注：给用户记一句话（谁是谁、哪位朋友介绍来的等），仅管理页可见 */}
+      <Modal
+        open={!!remarkUser} onCancel={() => setRemarkUser(null)}
+        title={`备注：${remarkUser?.username || ''}`} width={420}
+        okText="保存" cancelText="取消"
+        onOk={async () => {
+          await patch(remarkUser.id, { remark: remarkText.trim() });
+          setRemarkUser(null);
+        }}
+      >
+        <Input.TextArea
+          rows={3} maxLength={200} showCount
+          value={remarkText} onChange={(e) => setRemarkText(e.target.value)}
+          placeholder="比如：同事小王 / 某某介绍来的 / 已沟通勿禁用…（清空即删除备注）"
+        />
+        <p style={{ color: '#8c8c8c', fontSize: 12, marginTop: 8 }}>
+          备注只有管理员在用户管理里能看到，不会展示给该用户。
+        </p>
+      </Modal>
     </>
   );
 }

@@ -69,6 +69,15 @@ body {
   50% { opacity: 0; }
 }
 
+/* 顶栏弹窗/列表的可点击整行 hover 高亮（足迹/收藏/注解等） */
+.row-hover {
+  transition: background 0.15s;
+  border-radius: 6px;
+}
+.row-hover:hover {
+  background: #f0f5ff;
+}
+
 /* 新手引导灯泡：未登录时金色柔和闪烁提醒（登录后停止闪烁，仅保留静态图标） */
 @keyframes guide-blink {
   0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px rgba(250, 173, 20, 0.9)); }
