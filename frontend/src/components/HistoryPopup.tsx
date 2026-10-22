@@ -5,7 +5,7 @@ import { fmtShort } from '../utils/format';
 
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
-/** 顶栏「🕘 足迹」：浏览记录弹窗（仅自己可见；点击行回到那篇笔记） */
+/** 顶栏「🕘 足迹」：浏览记录弹窗（仅自己可见；点击行原地打开笔记浮窗，不跳转图谱页） */
 export default function HistoryPopup({ onOpenNode }: { onOpenNode: (nodeId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<any[]>([]);

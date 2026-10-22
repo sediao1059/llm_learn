@@ -80,8 +80,9 @@ export default function KnowledgeDrawer({
   // 注解阅读弹窗 + 放大阅读容器
   const [readingAnno, setReadingAnno] = useState<any>(null);
   const readerRef = useRef<HTMLDivElement>(null);
-  // 面试题懒加载生成弹窗
+  // 面试题懒加载生成弹窗（ivForce=true 为管理员从阅读弹窗发起的覆盖重生成）
   const [ivGenOpen, setIvGenOpen] = useState(false);
+  const [ivForce, setIvForce] = useState(false);
 
   // 打开面板：查收藏状态 + 上报浏览足迹（仅登录；同一节点连续打开只记一次）
   useEffect(() => {
@@ -300,7 +301,11 @@ export default function KnowledgeDrawer({
               <div
                 className="anno-entry"
                 style={{ marginTop: 14 }}
-                onClick={() => interviewAnno ? setReadingAnno(interviewAnno) : setIvGenOpen(true)}>
+                onClick={() => {
+                  if (interviewAnno) { setReadingAnno(interviewAnno); return; }
+                  setIvForce(false);
+                  setIvGenOpen(true);
+                }}>
                 {interviewAnno
                   ? '💼 高频面试题 · 点击阅读'
                   : '💼 高频面试题 · 还没有，点击让 AI 现场出题（生成后共享，下次秒开）'}
@@ -380,14 +385,32 @@ export default function KnowledgeDrawer({
         />
       )}
 
-      {/* 面试题懒加载生成弹窗：生成完落库后刷新注解列表，底部条目即变为可读 */}
+      {/* 面试题懒加载生成弹窗：拿到结果（新生成/命中缓存）后自动切换到注解阅读弹窗（md 渲染 + 角色化按钮） */}
       {isLoggedIn && nodeId && (
         <InterviewGenModal
           open={ivGenOpen}
           onClose={() => setIvGenOpen(false)}
           nodeId={nodeId}
           nodeTitle={nodeData?.title}
+          initialForce={ivForce}
           onSaved={() => onAnnotationSaved?.()}
+          onResult={async () => {
+            onAnnotationSaved?.(); // 通知父级刷新注解列表（底部条目变为可读状态）
+            try {
+              const r = await fetch(`/api/ai/annotations?nodeId=${encodeURIComponent(nodeId)}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}` },
+              });
+              const d = await r.json();
+              // 优先取 AI 生成版：覆盖重生成后新 AI 版与 build 提取的 system 版并存，应展示新生成的
+              const list = (d.annotations || []).filter((a: any) => a.type === 'interview');
+              const anno = list.find((a: any) => a.createdBy !== 'system') || list[0];
+              if (anno) {
+                setIvGenOpen(false);
+                setReadingAnno(anno);
+              }
+              // 拉取失败或没找到：留在生成弹窗（内容已完整展示，不打断用户）
+            } catch { /* 留在生成弹窗 */ }
+          }}
         />
       )}
 
@@ -446,7 +469,16 @@ export default function KnowledgeDrawer({
       </Modal>
 
       {/* 注解阅读弹窗（点正文荧光高亮 / 正文末尾兜底条目打开） */}
-      <AnnotationReadModal anno={readingAnno} onClose={() => setReadingAnno(null)} />
+      <AnnotationReadModal
+        anno={readingAnno}
+        onClose={() => setReadingAnno(null)}
+        onRegenerateInterview={() => {
+          // 管理员覆盖重生成：关阅读弹窗 → 以 force 模式打开生成弹窗（完成后再自动切回阅读态）
+          setReadingAnno(null);
+          setIvForce(true);
+          setIvGenOpen(true);
+        }}
+      />
     </>
   );
 }

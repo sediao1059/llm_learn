@@ -11,7 +11,7 @@
 2. **验证方式**：后端 `npx nest build`；前端 `npx tsc --noEmit && npx vite build`。不自动运行测试、不执行任何部署。
 3. **数据库**：Prisma schema 位于 `backend/prisma/schema.prisma`。新表用 `npx prisma db push` 同步；连接配置在 `backend/.env`（不入库）。任何对数据库结构的改动先征得所有者同意。
 4. **功能或行为变更必须同步更新**：SPEC.md 对应章节（必要时加变更记录）+ README.md 的功能说明。
-5. **数据分层**：手工笔记只存在于 `notes/*.md`（创作源头，build 同步入 MySQL）；AI 沉淀的知识只存数据库，**任何功能都不得自动改写 notes/ 下的文件**。
+5. **数据分层**：手工笔记与 AI 沉淀的知识都只存 MySQL——手工笔记在管理页「笔记管理」页签编辑（SPEC §4.19；notes/ 文件同步链路已于 2026-10-22 废弃删除）；AI 功能不得自动改写手工笔记的本体内容（「✨ AI 补充」只追加区块）。
 6. 文案、注释、文档全部中文；LLM 调用统一走 `backend/src/llm/llm.service.ts`。
 7. **多会话并发**：文件内容与预期不符时先重读再改。
 
@@ -19,12 +19,12 @@
 
 1. **双受众铁律**：学习者既有大模型新手也有老手——任何标签与功能的设计都要同时照顾两类人，自查清单见 [docs/content-style-guide.md](docs/content-style-guide.md) §1。
 2. **大白话铁律**：每篇笔记必须有「> **一句话**：…」大白话摘要；术语首次出现必须"翻译"；界面按钮/提示用动宾短语说人话。
-3. frontmatter 字段全表与标注判据：见 docs/content-style-guide.md §4–§5。
+3. 笔记元数据字段（原 frontmatter，现为「笔记管理」表单字段）全表与标注判据：见 docs/content-style-guide.md §4–§5。
 4. 知识五维模型：见 [docs/knowledge-dimensions-plan.md](docs/knowledge-dimensions-plan.md)。
 
 ## 项目速览
 
 - 后端：`cd backend && npm run start:dev` → http://127.0.0.1:8080/api
 - 前端：`cd frontend && npm run dev` → http://127.0.0.1:3000
-- 结构：`notes/` 学习笔记 · `backend/` NestJS 后端 · `frontend/` React 前端
+- 结构：`backend/` NestJS 后端 · `frontend/` React 前端（学习笔记存 MySQL，管理页「笔记管理」编辑）
 - 功能全貌见 [README.md](README.md)，需求规范见 [SPEC.md](SPEC.md)

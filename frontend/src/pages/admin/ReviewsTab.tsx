@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Table, Button, Tag, Drawer, Radio, Select, Space, Modal, Input, message, Card, Descriptions, Empty,
 } from 'antd';
+import { trackLlmCall } from '../../utils/llmQueueNotice';
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -37,9 +38,9 @@ export default function ReviewsTab() {
   const doExtract = async (sub: any) => {
     setExtracting(prev => ({ ...prev, [sub.id]: true }));
     try {
-      const r = await fetch(`/api/admin/submissions/${sub.id}/extract`, {
+      const r = await trackLlmCall(fetch(`/api/admin/submissions/${sub.id}/extract`, {
         method: 'POST', headers: headers(),
-      });
+      }));
       const d = await r.json();
       if (!r.ok) throw new Error(d.message || '提取失败');
       setDrafts(prev => ({
@@ -126,7 +127,9 @@ export default function ReviewsTab() {
           <Card key={a.id} style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Tag>#{a.id} · {a.type}注</Tag>
-              <span style={{ fontSize: 12, color: '#8c8c8c' }}>{a.createdBy}</span>
+              <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+                {a.createdBy}{a.displayName && a.displayName !== a.createdBy ? `（${a.displayName}）` : ''}
+              </span>
               <Tag color={a.status === 'pending' ? 'warning' : a.status === 'approved' ? 'success' : 'error'}>
                 {a.status === 'pending' ? '待审' : a.status === 'approved' ? '已过' : '驳回'}
               </Tag>

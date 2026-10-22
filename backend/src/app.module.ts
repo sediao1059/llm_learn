@@ -17,6 +17,7 @@ import { HotModule } from './hot/hot.module';
 import { JobsModule } from './jobs/jobs.module';
 import { VersionsModule } from './versions/versions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { NotesModule } from './notes/notes.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     JobsModule,
     VersionsModule,
     AnalyticsModule,
+    NotesModule,
   ],
 })
 export class AppModule {}

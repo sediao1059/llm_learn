@@ -9,6 +9,7 @@ import AnnotationEntries from '../../components/AnnotationEntries';
 import useSelectionAnno from '../../hooks/useSelectionAnno';
 import { applyAnnoMarks, findAnnoByClickTarget } from '../../utils/annotate';
 import { useAuth } from '../../store/auth';
+import { showQueuedNotice, hideQueueNotice } from '../../utils/llmQueueNotice';
 
 interface Props {
   open: boolean;
@@ -117,6 +118,10 @@ export default function TopicContentDrawer({
             if (ev === 'delta' && payload.text) {
               full += payload.text;
               setContent(full);
+            } else if (ev === 'queued') {
+              showQueuedNotice(payload);
+            } else if (ev === 'start') {
+              hideQueueNotice();
             } else if (ev === 'result') {
               setContent(payload.content || full);
               if (!payload.cached) onGenerated(payload.content || full);
@@ -135,6 +140,7 @@ export default function TopicContentDrawer({
       if (e?.name === 'AbortError') return; // 关闭抽屉主动中断，不算错误
       setError(e.message || '生成失败');
     } finally {
+      hideQueueNotice();
       setStreaming(false);
     }
   };

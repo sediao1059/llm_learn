@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, Progress, Tag, Button, Empty, Spin, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Card, Progress, Tag, Button, Empty, Spin, message, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import TreeView from './TreeView';
 import GenerateModal from './GenerateModal';
 import TopicContentDrawer from './TopicContentDrawer';
 import KnowledgeDrawer from '../../components/KnowledgeDrawer';
 import { useAuth } from '../../store/auth';
+import { trackLlmCall } from '../../utils/llmQueueNotice';
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -123,16 +124,35 @@ export default function PathsPage() {
     if (!selectedId) return;
     setExtending(true);
     try {
-      const r = await fetch(`/api/ai/paths/${selectedId}/extend`, {
+      const r = await trackLlmCall(fetch(`/api/ai/paths/${selectedId}/extend`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ nodeId }),
-      });
+      }));
       const d = await r.json();
       if (!r.ok) throw new Error(d.message || '整合失败');
       message.success('✅ 已加入路线');
       setPaths(prev => prev.map(p => p.id === selectedId ? { ...p, tree: d.tree } : p));
     } catch (e: any) { message.error(e.message); }
     finally { setExtending(false); }
+  };
+
+  /** 是否可删除：与后端一致——普通路线限创建者或管理员，官方路线仅管理员 */
+  const canDelete = (p: any) =>
+    !!user && (user.role === 'admin' || (!p.isOfficial && p.createdBy === user.username));
+
+  const doDelete = async (p: any) => {
+    try {
+      const r = await fetch(`/api/ai/paths/${p.id}`, { method: 'DELETE', headers: headers() });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.message || '删除失败');
+      message.success('已删除');
+      const rest = paths.filter(x => x.id !== p.id);
+      setPaths(rest);
+      if (selectedId === p.id) {
+        setSelectedId(rest[0]?.id ?? null);
+        setTopicAddr(null);
+      }
+    } catch (e: any) { message.error(e.message); }
   };
 
   /** 新主题内容生成完成：回写本地路线树（Tag 变「已生成」，下次点开直接读缓存） */
@@ -170,6 +190,15 @@ export default function PathsPage() {
                 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{p.title}</span>
+                  {canDelete(p) && (
+                    <Popconfirm
+                      title={`删除路线「${p.title}」？`}
+                      description="路线与已生成内容将一并删除，不可恢复"
+                      okText="删除" cancelText="取消" okButtonProps={{ danger: true }}
+                      onConfirm={() => doDelete(p)}>
+                      <DeleteOutlined onClick={e => e.stopPropagation()} style={{ color: '#ff4d4f', fontSize: 13 }} />
+                    </Popconfirm>
+                  )}
                   <Progress type="circle" percent={pct} size={42}
                     strokeColor={pct === 100 ? '#52c41a' : '#1677ff'}
                     format={(v) => <span style={{ fontSize: 10 }}>{v}%</span>} />

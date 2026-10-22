@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # llm_learn 一键部署脚本
 # 用法：./deploy.sh back|front|all
-#   back  : rsync 后端源码与笔记到服务器 → 服务器容器内安装依赖/构建/同步库表与笔记 → 重启运行容器
+#   back  : rsync 后端源码到服务器 → 服务器容器内安装依赖/构建/同步库表 → 重启运行容器
 #   front : 本地构建前端 → rsync dist 静态资源到服务器
 #   all   : back + front
 #
@@ -34,22 +34,21 @@ ensure_server_image() {
 }
 
 push_backend() {
-  say "同步后端源码与笔记到服务器"
-  ssh "$SERVER" "mkdir -p $REMOTE_DIR/backend $REMOTE_DIR/notes"
+  say "同步后端源码到服务器"
+  ssh "$SERVER" "mkdir -p $REMOTE_DIR/backend"
   rsync -a --delete --exclude node_modules --exclude dist --exclude .env "$ROOT/backend/" "$SERVER:$REMOTE_DIR/backend/"
-  rsync -a --delete --exclude node_modules "$ROOT/notes/" "$SERVER:$REMOTE_DIR/notes/"
 }
 
 remote_backend() {
-  say "服务器端：安装依赖 → 构建 → 同步表结构（db push 幂等）→ 笔记入库 → 重启后端容器"
+  say "服务器端：安装依赖 → 构建 → 同步表结构（db push 幂等）→ 重启后端容器"
   ssh "$SERVER" REMOTE_DIR="$REMOTE_DIR" IMAGE="$IMAGE" CONTAINER="$CONTAINER" NETWORK="$NETWORK" BACKEND_PORT="$BACKEND_PORT" NPM_REGISTRY="$NPM_REGISTRY" bash -s <<'EOF'
 set -e
 cd "$REMOTE_DIR/backend"
 [ -f .env ] || { echo "✖ 缺少 $REMOTE_DIR/backend/.env（首次部署请手工创建，至少含 DATABASE_URL / JWT_SECRET / PORT）"; exit 1; }
 docker network create "$NETWORK" 2>/dev/null || true
 docker network connect "$NETWORK" mysql 2>/dev/null || true
-BUILD="docker run --rm --network $NETWORK --env-file .env -v $REMOTE_DIR/backend:/app -v $REMOTE_DIR/notes:/app/notes -w /app -e NPM_CONFIG_REGISTRY=$NPM_REGISTRY -e PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma $IMAGE"
-$BUILD bash -c 'npm install --no-audit --no-fund && npx prisma generate && npx prisma db push --skip-generate && npx nest build && node dist/scripts/build.js'
+BUILD="docker run --rm --network $NETWORK --env-file .env -v $REMOTE_DIR/backend:/app -w /app -e NPM_CONFIG_REGISTRY=$NPM_REGISTRY -e PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma $IMAGE"
+$BUILD bash -c 'npm install --no-audit --no-fund && npx prisma generate && npx prisma db push --skip-generate && npx nest build'
 docker rm -f "$CONTAINER" 2>/dev/null || true
 docker run -d --name "$CONTAINER" --restart unless-stopped --network "$NETWORK" -p 127.0.0.1:$BACKEND_PORT:$BACKEND_PORT --env-file .env -v "$REMOTE_DIR/backend:/app" -w /app "$IMAGE" node dist/src/main.js
 sleep 2

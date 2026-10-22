@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../store/auth';
 import MarkdownContent from './MarkdownContent';
+import { showQueuedNotice, hideQueueNotice, trackLlmCall } from '../utils/llmQueueNotice';
 
 interface ChatItem {
   id: number; title: string; createdBy: string;
@@ -208,6 +209,8 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
     };
 
     streamPost(`/ai/chats/${chatId}/messages`, { content, modelId }, {
+      queued: d => showQueuedNotice(d),
+      start: () => hideQueueNotice(),
       delta: d => patch(m => ({ ...m, content: m.content + d.text })),
       thinking: d => patch(m => ({ ...m, thinking: (m.thinking || '') + d.text })),
       result: d => patch(m => ({ ...m, id: d.messageId })),
@@ -215,10 +218,12 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
     }).then(() => {
       setStreaming(false);
       streamingChat.current = null;
+      hideQueueNotice();
       loadChats();
     }).catch(e => {
       setStreaming(false);
       streamingChat.current = null;
+      hideQueueNotice();
       // 已有部分内容则保留流式结果，否则在气泡里展示错误；提问本身已保留（SPEC §4.2）
       patch(m => ({ ...m, error: m.content ? null : String(e.message || e) }));
     });
@@ -238,9 +243,9 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
     }
     setPreviewLoading(true);
     try {
-      const d = await jsonFetch('/ai/knowledge/preview', 'POST', {
+      const d = await trackLlmCall(jsonFetch('/ai/knowledge/preview', 'POST', {
         chatId: currentChatId, questionId: qid, answerId: aid,
-      });
+      }));
       setPreview(d);
       setPreviewTitle(d.decision?.title || '');
     } catch (e: any) { message.error(e.message || 'AI 整合判断失败'); }
@@ -345,7 +350,7 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>💬 AI 助手</span>
-            <span style={{ fontSize: 12, color: '#999', fontWeight: 400 }}>团队问答池 · 全员共享可续聊</span>
+            <span style={{ fontSize: 12, color: '#999', fontWeight: 400 }}>我的会话 · 仅自己可见</span>
           </div>
         }
         styles={{ body: { padding: 0 } }}
@@ -380,7 +385,7 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
                     fontSize: 11, color: '#999', marginTop: 2,
                   }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.createdBy || '?'} · {String(c.updatedAt || '').slice(5, 16).replace('T', ' ')}
+                      {String(c.updatedAt || '').slice(5, 16).replace('T', ' ')}
                     </span>
                     <span className="ai-session-ops" style={{ flexShrink: 0 }}>
                       <EditOutlined style={{ marginRight: 6 }} onClick={e => {

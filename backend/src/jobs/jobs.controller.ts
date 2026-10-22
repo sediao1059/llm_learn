@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { UploadGraphService } from '../uploads/upload-graph.service';
 
 @Controller('admin/jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,11 +14,13 @@ export class JobsController {
   constructor(
     private prisma: PrismaService,
     private knowledge: KnowledgeService,
+    private uploadGraph: UploadGraphService,
   ) {}
 
   private jobDefs = [
     { id: 'tiers', name: '图谱分层选举', schedule: '手动', desc: '按度数选分类 hub + BFS 挂靠' },
     { id: 'hot', name: '热门推荐统计', schedule: '手动', desc: '统计近 30 天足迹（>10 票上榜）' },
+    { id: 'upload-graph', name: '上传知识挂图谱', schedule: '每日 03:25（自动）+ 手动', desc: '审核通过的多条拆解知识建节点连向专栏聚合节点、彼此互连（幂等，重复执行不产生重复节点）' },
   ];
 
   @Get()
@@ -40,6 +43,7 @@ export class JobsController {
       try {
         if (id === 'tiers') await this.runTiers();
         else if (id === 'hot') await this.runHot();
+        else if (id === 'upload-graph') await this.uploadGraph.syncUploadsToGraph();
         const now = new Date().toLocaleString('sv-SE');
         await this.prisma.appKv.upsert({
           where: { key: `job_${id}_last` },

@@ -10,10 +10,7 @@
     "start:prod": "node dist/main",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio",
-    "seed:paths": "ts-node scripts/seed-paths.ts",
-    "rename-user": "ts-node scripts/rename-user.ts",
-    "sync:notes": "ts-node scripts/build.ts"
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

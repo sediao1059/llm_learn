@@ -24,11 +24,13 @@ export default function PathsTab() {
   const columns = [
     { title: '路线', key: 'title', render: (_: any, r: any) => (
       <Space>
-        <a onClick={() => { setViewPath(r); fetch(`/api/ai/paths`, { headers: headers() })
-          .then(res => res.json()).then(d => {
-            const full = (d.paths || []).find((p: any) => p.id === r.id);
-            if (full?.tree) setViewPath({ ...r, tree: full.tree });
-          }); }}>
+        <a onClick={() => {
+          setViewPath(r);
+          // 列表接口只返回官方+本人路线，私人路线详情走单条接口（管理员可看任何一条）
+          fetch(`/api/ai/paths/${r.id}`, { headers: headers() })
+            .then(res => res.ok ? res.json() : null)
+            .then(d => { if (d?.tree) setViewPath({ ...r, tree: d.tree }); });
+        }}>
           <b>{r.title}</b>
         </a>
         {r.isOfficial && <Tag color="warning">⭐ 官方</Tag>}

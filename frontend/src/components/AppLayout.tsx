@@ -10,13 +10,14 @@ import ProfileModal from './ProfileModal';
 import AssistantDrawer from './AssistantDrawer';
 import HistoryPopup from './HistoryPopup';
 import FavoritesPopup from './FavoritesPopup';
+import NodeReadDrawer from './NodeReadDrawer';
 import MyAnnotationsModal from './MyAnnotationsModal';
 import DepositCenterModal from './DepositCenterModal';
 
 const { Header, Content } = Layout;
 
 /** 需要登录才能访问的路径 */
-const AUTH_REQUIRED = ['/paths', '/upload'];
+const AUTH_REQUIRED = ['/paths', '/upload', '/mine'];
 
 export default function AppLayout() {
   const nav = useNavigate();
@@ -27,6 +28,8 @@ export default function AppLayout() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [myAnnoOpen, setMyAnnoOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  // 足迹/收藏点行：在当前页原地打开笔记浮窗（不跳转图谱页）
+  const [readNodeId, setReadNodeId] = useState<string | null>(null);
   const [version, setVersion] = useState('');
   const [verDate, setVerDate] = useState('');
   const [verChanges, setVerChanges] = useState<string[]>([]);
@@ -38,7 +41,7 @@ export default function AppLayout() {
     message.info('请先登录后使用该功能');
   };
 
-  /** 足迹/收藏/我的注解/沉淀中心 → 回到图谱页并打开那篇笔记 */
+  /** 我的注解/沉淀中心 → 回到图谱页并打开那篇笔记 */
   const openNode = (nodeId: string) => {
     nav(`/?node=${encodeURIComponent(nodeId)}`);
   };
@@ -76,8 +79,11 @@ export default function AppLayout() {
 
   const items = [
     { key: '/', label: '🧠 知识图谱' },
+    { key: '/library', label: '📚 知识库' },
+    { key: '/recent', label: '🆕 最近更新' },
     { key: '/paths', label: '🗺 学习路线' },
     { key: '/upload', label: '📤 上传知识' },
+    { key: '/mine', label: '📋 我的提交' },
     ...(user?.role === 'admin' ? [{ key: '/admin', label: '🛡 管理' }] : []),
   ];
 
@@ -135,8 +141,8 @@ export default function AppLayout() {
           </Tooltip>
           {user && (
             <>
-              <HistoryPopup onOpenNode={openNode} />
-              <FavoritesPopup onOpenNode={openNode} />
+              <HistoryPopup onOpenNode={setReadNodeId} />
+              <FavoritesPopup onOpenNode={setReadNodeId} />
               <Tooltip title="我划词沉淀过的全部注解">
                 <Button size="small" icon={<BulbOutlined />}
                   onClick={() => setMyAnnoOpen(true)}>注解</Button>
@@ -173,7 +179,7 @@ export default function AppLayout() {
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={onLoginSuccess} />
       {user && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />}
 
-      {/* 全局 AI 助手抽屉（全员共享会话池 + 沉淀为知识点） */}
+      {/* 全局 AI 助手抽屉（个人会话 + 沉淀为知识点） */}
       <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
       {user && (
         <>
@@ -181,6 +187,8 @@ export default function AppLayout() {
             onOpenNode={openNode} onOpenPath={() => nav('/paths')} />
           <DepositCenterModal open={depositOpen} onClose={() => setDepositOpen(false)}
             onOpenNode={openNode} />
+          {/* 足迹/收藏点行打开的笔记浮窗：与图谱页同一个，任意页面原地弹出 */}
+          <NodeReadDrawer open={!!readNodeId} onClose={() => setReadNodeId(null)} nodeId={readNodeId} />
         </>
       )}
     </Layout>

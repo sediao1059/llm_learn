@@ -29,9 +29,17 @@ export class AssistantController {
     private llm: LlmService,
   ) {}
 
+  /** 取当前用户自己的会话：会话个人可见，别人的会话一律按"不存在"处理（不泄露存在性） */
+  private async ownChat(id: number, username: string) {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id } });
+    if (!chat || chat.createdBy !== username) throw new NotFoundException('会话不存在');
+    return chat;
+  }
+
   @Get()
-  async listChats() {
+  async listChats(@CurrentUser() user: CurrentUserType) {
     const rows = await this.prisma.aiChat.findMany({
+      where: { createdBy: user.username },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       include: { messages: { orderBy: { id: 'desc' }, take: 1 } },
     });
@@ -54,7 +62,8 @@ export class AssistantController {
   }
 
   @Patch(':id')
-  async rename(@Param('id') id: number, @Body() body: any) {
+  async rename(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType) {
+    await this.ownChat(id, user.username);
     const title = String(body.title || '').trim().slice(0, 60);
     if (!title) throw new BadRequestException('标题不能为空');
     const r = await this.prisma.aiChat.update({ where: { id }, data: { title } });
@@ -63,16 +72,16 @@ export class AssistantController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: number) {
+  async remove(@Param('id') id: number, @CurrentUser() user: CurrentUserType) {
+    await this.ownChat(id, user.username);
     await this.prisma.aiMessage.deleteMany({ where: { chatId: id } });
     await this.prisma.aiChat.delete({ where: { id } });
     return { ok: true };
   }
 
   @Get(':id/messages')
-  async messages(@Param('id') id: number) {
-    const chat = await this.prisma.aiChat.findUnique({ where: { id } });
-    if (!chat) throw new NotFoundException('会话不存在');
+  async messages(@Param('id') id: number, @CurrentUser() user: CurrentUserType) {
+    const chat = await this.ownChat(id, user.username);
     const rows = await this.prisma.aiMessage.findMany({
       where: { chatId: id }, orderBy: { id: 'asc' },
     });
@@ -90,8 +99,7 @@ export class AssistantController {
     @CurrentUser() user: CurrentUserType,
     @Res() res: Response,
   ) {
-    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
-    if (!chat) throw new NotFoundException('会话不存在');
+    const chat = await this.ownChat(chatId, user.username);
     const content = String(body.content || '').trim();
     if (!content) throw new BadRequestException('内容不能为空');
     if (content.length > 8000) throw new BadRequestException('内容过长（最多 8000 字）');
@@ -121,6 +129,9 @@ export class AssistantController {
     const heartbeat = setInterval(() => {
       try { res.write(': ping\n\n'); } catch { /* ignore */ }
     }, 10000);
+    // 页面/浏览器关闭时中止本次模型调用：排队中直接出队，运行中停掉上游请求并立刻释放并发额度
+    const clientAbort = new AbortController();
+    res.on('close', () => clientAbort.abort());
 
     try {
       const history = await this.prisma.aiMessage.findMany({
@@ -134,6 +145,14 @@ export class AssistantController {
       const r = await this.llm.chatStream(model, {
         system,
         messages: history.map(m => ({ role: m.role, content: m.content })),
+        userId: user.id,
+        username: user.username,
+        clientSignal: clientAbort.signal,
+        onQueued: info => send('queued', {
+          ahead: info.ahead, etaSeconds: info.etaSeconds,
+          modelName: model.name || model.modelId,
+        }),
+        onStart: () => send('start', {}),
         onDelta: t => send('delta', { text: t }),
         onThinking: t => send('thinking', { text: t }),
       });

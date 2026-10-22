@@ -22,7 +22,9 @@ export class AdminAnnotationsController {
       where: { status: s, type: { not: 'interview' } }, orderBy: { id: 'desc' }, take: 200,
     });
     const helper = new AnnotationsController(this.prisma);
-    return { annotations: rows.map(r => (helper as any).pub(r)) };
+    // 作者显示名：昵称优先（审核页展示「账号（昵称）」，createdBy 原值保留）
+    const names = await (helper as any).displayNameMap(rows.map((r: any) => r.createdBy));
+    return { annotations: rows.map(r => (helper as any).pub(r, names)) };
   }
 
   @Post(':id/approve')

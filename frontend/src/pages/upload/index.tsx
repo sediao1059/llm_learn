@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, Tabs, Form, Input, Button, Tag, Timeline, Statistic, message, Alert } from 'antd';
+import { Card, Tabs, Form, Input, Button, Tag, Statistic, message, Alert, Tooltip } from 'antd';
 import { api } from '../../api/client';
+import UploadItemReadDrawer from '../../components/UploadItemReadDrawer';
 
 interface Upload {
   id: number; kind: string; url: string; title: string; note: string;
@@ -12,6 +13,7 @@ export default function UploadPage() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [contrib, setContrib] = useState({ total: 0, days: [] as any[] });
   const [submitting, setSubmitting] = useState(false);
+  const [reading, setReading] = useState<any>(null);
 
   const load = useCallback(() => {
     api.get('/ai/uploads/mine').then(r => setUploads(r.data.uploads || [])).catch(() => {});
@@ -99,7 +101,11 @@ export default function UploadPage() {
                 {u.rejectReason && <Alert type="error" message={`驳回理由：${u.rejectReason}`} style={{ marginTop: 8 }} closable />}
                 {u.items?.length > 0 && (
                   <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {u.items.map((it: any) => <Tag key={it.id}>{it.title}</Tag>)}
+                    {u.items.map((it: any) => (
+                      <Tooltip key={it.id} title="点开阅读 AI 拆解出的这篇内容（审核通过前也只有你能看到）">
+                        <Tag style={{ cursor: 'pointer' }} onClick={() => setReading(it)}>{it.title}</Tag>
+                      </Tooltip>
+                    ))}
                   </div>
                 )}
               </Card>
@@ -115,6 +121,9 @@ export default function UploadPage() {
           上传入库 +8/篇 · 沉淀通过 +5 · 注解通过 +2
         </p>
       </Card>
+
+      {/* 拆解条目阅读浮窗：AI 拆解保存后立即可读（审核通过前仅自己可见），全部历史见「📋 我的提交」页 */}
+      <UploadItemReadDrawer item={reading} onClose={() => setReading(null)} />
     </div>
   );
 }

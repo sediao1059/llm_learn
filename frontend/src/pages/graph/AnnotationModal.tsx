@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Modal, Input, Button, Tag, message, Spin } from 'antd';
 import { SendOutlined, SaveOutlined } from '@ant-design/icons';
+import { showQueuedNotice, hideQueueNotice, trackLlmCall } from '../../utils/llmQueueNotice';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -101,6 +102,10 @@ export default function AnnotationModal({
                 next[next.length - 1] = { role: 'assistant', content: full };
                 return next;
               });
+            } else if (ev === 'queued') {
+              showQueuedNotice(payload);
+            } else if (ev === 'start') {
+              hideQueueNotice();
             } else if (ev === 'error') {
               message.error(payload.error || '生成失败');
             }
@@ -114,6 +119,7 @@ export default function AnnotationModal({
       // 移除空的 assistant 消息
       setMessages(prev => prev.filter(m => m.content || m.role === 'user'));
     } finally {
+      hideQueueNotice();
       setStreaming(false);
     }
   };
@@ -123,11 +129,11 @@ export default function AnnotationModal({
     if (!validMessages.length) return message.warning('请先提问生成一些内容');
     setDistilling(true);
     try {
-      const r = await fetch('/api/ai/annotations/distill', {
+      const r = await trackLlmCall(fetch('/api/ai/annotations/distill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ anchorText, nodeTitle, messages: validMessages }),
-      });
+      }));
       const d = await r.json();
       if (!r.ok) throw new Error(d.message || '提炼失败');
       setPreview(d.answer);

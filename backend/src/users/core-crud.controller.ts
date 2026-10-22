@@ -177,6 +177,28 @@ export class CoreCrudController {
     return { ok: true };
   }
 
+  // ===== 图谱起点聚焦（根节点 + 层数，跟账号持久化；app_kv 按用户存，不改表） =====
+  @Get('graph/focus')
+  async getGraphFocus(@CurrentUser() user: CurrentUserType) {
+    const kv = await this.prisma.appKv.findUnique({ where: { key: `graph_focus_${user.username}` } });
+    try {
+      const v = kv ? JSON.parse(kv.value) : null;
+      return { focus: v && typeof v === 'object' ? { rootNodeId: v.rootNodeId || null, depth: v.depth || 3 } : null };
+    } catch {
+      return { focus: null };
+    }
+  }
+
+  @Put('graph/focus')
+  async setGraphFocus(@CurrentUser() user: CurrentUserType, @Body() body: any) {
+    const rootNodeId = body.rootNodeId == null ? null : String(body.rootNodeId).slice(0, 120);
+    const depth = [2, 3, 4].includes(Number(body.depth)) ? Number(body.depth) : 3;
+    const key = `graph_focus_${user.username}`;
+    const value = JSON.stringify({ rootNodeId, depth });
+    await this.prisma.appKv.upsert({ where: { key }, create: { key, value }, update: { value } });
+    return { ok: true };
+  }
+
   // ===== 图谱分层（公开读取） =====
   @Get('graph/tiers')
   async getTiers() {

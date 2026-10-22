@@ -4,6 +4,7 @@ import {
   Popconfirm, Tooltip, message,
 } from 'antd';
 import { PlusOutlined, ApiOutlined } from '@ant-design/icons';
+import { trackLlmCall } from '../../utils/llmQueueNotice';
 
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
@@ -77,7 +78,7 @@ export default function ModelsTab() {
   const test = async (m: any) => {
     setTestingId(m.id);
     try {
-      await req(`/llm/models/${m.id}/test`, 'POST');
+      await trackLlmCall(req(`/llm/models/${m.id}/test`, 'POST'));
       message.success(`「${m.name}」连接成功`);
     } catch (e: any) { message.error(`「${m.name}」连接失败：${e.message}`); }
     finally { setTestingId(null); }

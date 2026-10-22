@@ -8,6 +8,7 @@ import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { UploadGraphService } from './upload-graph.service';
 
 @Controller()
 @UseGuards(JwtAuthGuard, LlmBanGuard)
@@ -15,6 +16,7 @@ export class UploadsController {
   constructor(
     private prisma: PrismaService,
     private llm: LlmService,
+    private uploadGraph: UploadGraphService,
   ) {}
 
   private excerpt(s: string, n = 160) {
@@ -75,7 +77,8 @@ export class UploadsController {
       orderBy: { id: 'desc' }, take: 50,
       include: { items: { orderBy: { seq: 'asc' } } },
     });
-    return { uploads: uploads.map(u => this.pub(u, u.items, false)) };
+    // 上传者本人可读全部内容（含审核通过前的拆解正文），仅查询自己的记录，无越权
+    return { uploads: uploads.map(u => this.pub(u, u.items, true)) };
   }
 
   /** 后台拆解（抓取+LLM→写 items→extracted） */
@@ -238,7 +241,10 @@ export class UploadsController {
       where: { id },
       data: { status: 'approved', decidedAt: new Date(), decidedBy: user.username },
     });
-    return { ok: true, collectionId: colId, itemCount: kept.length, points: kept.length * 8 };
+    // 多条拆解知识即刻挂上图谱（每条一个 up- 节点，连向专栏聚合节点、彼此互连）；
+    // 每日定时任务幂等兜底，这里无需等待其结果
+    const attached = await this.uploadGraph.syncUploadsToGraph(up.id).catch(() => ({ uploads: 0, created: 0 }));
+    return { ok: true, collectionId: colId, itemCount: kept.length, points: kept.length * 8, graphNodes: attached.created };
   }
 
   @Post('admin/uploads/:id/reject')

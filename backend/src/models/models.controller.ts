@@ -1,9 +1,12 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, UseGuards, BadRequestException, NotFoundException,
+  Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, BadRequestException, NotFoundException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { abortSignalFromClient } from '../llm/llm-queue';
 
 function maskKey(key: string) {
   const k = String(key || '');
@@ -101,10 +104,13 @@ export class ModelsController {
   }
 
   @Post(':id/test')
-  async test(@Param('id') id: number) {
+  async test(@Param('id') id: number, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const row = await this.prisma.llmModel.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('模型不存在');
-    const r = await this.llm.testModel(row as any);
+    const r = await this.llm.testModel(row as any, {
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
+    });
     if (!r.ok) throw new BadRequestException(r.error || '连接失败');
     return r;
   }

@@ -27,4 +27,10 @@ export class KnowledgeController {
     });
     res.end(json);
   }
+
+  /** 最近更新的知识（公开；带有效登录态时合并 AI 沉淀层，无效会话静默降级） */
+  @Get('recent')
+  async recent(@Headers('authorization') auth?: string) {
+    return this.knowledge.getRecent(auth);
+  }
 }

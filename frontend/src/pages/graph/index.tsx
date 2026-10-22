@@ -1,65 +1,189 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Spin } from 'antd';
+import { Spin, Input, Select, Button, Badge, Tooltip, Popover, Segmented } from 'antd';
+import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
-import { useAuth } from '../../store/auth';
-import KnowledgeDrawer from '../../components/KnowledgeDrawer';
+import { useKnowledgeBase } from '../../hooks/useKnowledgeBase';
+import NodeReadDrawer from '../../components/NodeReadDrawer';
 
-interface KnowledgeData {
-  nodes: any[]; edges: any[]; categories: string[]; layers: string[];
-  allTags: { tag: string; count: number }[]; routes: any[]; generatedAt: string;
-}
+// 难度筛选项（AI 沉淀节点无难度字段，统一归「未标注」）
+const DIFFICULTY_OPTIONS = [
+  { value: '入门', label: '入门（新手也能懂）' },
+  { value: '进阶', label: '进阶（需要一些基础）' },
+  { value: '深入', label: '深入（老手进阶用）' },
+  { value: '未标注', label: '未标注（含 ✨ AI 沉淀）' },
+];
 
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
-  const [data, setData] = useState<KnowledgeData | null>(null);
-  const [aiData, setAiData] = useState<any>(null);
+  const { data, aiData, user } = useKnowledgeBase();
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
-  const [progress, setProgress] = useState<Record<string, number>>({});
-  const [annotations, setAnnotations] = useState<any[]>([]);
-  const [annKey, setAnnKey] = useState(0);
   const [searchParams] = useSearchParams();
 
+  // ===== 筛选（面板默认折叠；文本搜索 × 标签多选 × 难度多选，AND 叠加，SPEC §4.5）=====
+  // 三个条件全部持久化：刷新后保持，点「清空筛选」才全部重置
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState(() => localStorage.getItem('kg.filter.search') || '');
+  const [searchText, setSearchText] = useState(() => localStorage.getItem('kg.filter.search') || ''); // 防抖后再过滤，避免每敲一个字力导向重排
+  const [selTags, setSelTags] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('kg.filter.tags') || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch { return []; }
+  });
+  const [selDiffs, setSelDiffs] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('kg.filter.diffs') || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch { return []; }
+  });
+
   useEffect(() => {
-    api.get('/knowledge/bundle.json').then(r => setData(r.data)).catch(() => {});
+    const t = setTimeout(() => setSearchText(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => { localStorage.setItem('kg.filter.search', searchText); }, [searchText]);
+  useEffect(() => { localStorage.setItem('kg.filter.tags', JSON.stringify(selTags)); }, [selTags]);
+  useEffect(() => { localStorage.setItem('kg.filter.diffs', JSON.stringify(selDiffs)); }, [selDiffs]);
+
+  // ===== 起点聚焦（SPEC §4.5）：根节点 + 层数，默认只看「从起点出发 N 层」=====
+  // 新用户/未自选 → 默认根 = 全图度数最高的枢纽节点；自选起点跟账号持久化（游客存本机）
+  const [focusCfgLoaded, setFocusCfgLoaded] = useState(false);
+  const [rootNodeId, setRootNodeId] = useState<string | null>(null); // null = 未自选（用默认枢纽）
+  const [focusDepth, setFocusDepth] = useState(3);
+  const [showAll, setShowAll] = useState(false); // 临时看全部（不持久化）
+
+  useEffect(() => {
     if (user) {
-      api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
-      api.get('/progress').then(r => {
-        const prog: Record<string, number> = {};
-        if (r.data?.progress) {
-          for (const [id, v] of Object.entries(r.data.progress)) prog[id] = (v as any).level || 0;
+      api.get('/graph/focus').then(r => {
+        if (r.data?.focus) {
+          setRootNodeId(r.data.focus.rootNodeId || null);
+          setFocusDepth(r.data.focus.depth || 3);
         }
-        setProgress(prog);
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => setFocusCfgLoaded(true));
+    } else {
+      try {
+        const v = JSON.parse(localStorage.getItem('kg.focus') || 'null');
+        if (v && typeof v === 'object') {
+          setRootNodeId(v.rootNodeId || null);
+          setFocusDepth(v.depth || 3);
+        }
+      } catch { /* 容错 */ }
+      setFocusCfgLoaded(true);
     }
   }, [user]);
+
+  /** 改起点/层数：本地立即生效并持久化（登录存服务端跟账号走，游客存本机） */
+  const saveFocus = (root: string | null, depth: number) => {
+    setRootNodeId(root);
+    setFocusDepth(depth);
+    if (user) api.put('/graph/focus', { rootNodeId: root, depth }).catch(() => {});
+    else localStorage.setItem('kg.focus', JSON.stringify({ rootNodeId: root, depth }));
+  };
+
+  // 底部分类图例（彩色按钮）的显隐状态：点击切换时记录，刷新后保持
+  const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('kg.legend.selected') || '{}');
+      return v && typeof v === 'object' ? v : {};
+    } catch { return {}; }
+  });
+
+  // 静态笔记 + AI 沉淀动态层合并（筛选在合并后的全集上进行，AI 节点一并参与）
+  const merged = useMemo(() => {
+    if (!data) return { nodes: [] as any[], edges: [] as any[], categories: [] as string[] };
+    const nodes = [...data.nodes];
+    const edges = [...data.edges];
+    let categories = data.categories;
+    if (aiData?.nodes) {
+      const knownIds = new Set(data.nodes.map((n: any) => n.id));
+      nodes.push(...aiData.nodes);
+      edges.push(...(aiData.edges || []).filter((e: any) =>
+        knownIds.has(e.source) || aiData.nodes.some((n: any) => n.id === e.source)));
+      // AI 节点分类（如「📚 专栏」）在静态基础上合并（SPEC §4.4），图例与着色统一
+      categories = [...new Set([
+        ...data.categories,
+        ...aiData.nodes.map((n: any) => n.category).filter(Boolean),
+      ])];
+    }
+    return { nodes, edges, categories };
+  }, [data, aiData]);
+
+  // 默认起点：全图度数最高（连线最多）的枢纽节点，随知识增长自动换
+  const defaultRootId = useMemo(() => {
+    if (!merged.nodes.length) return null;
+    const deg: Record<string, number> = {};
+    for (const e of merged.edges) {
+      deg[e.source] = (deg[e.source] || 0) + 1;
+      deg[e.target] = (deg[e.target] || 0) + 1;
+    }
+    return merged.nodes.reduce((a, b) => ((deg[b.id] || 0) > (deg[a.id] || 0) ? b : a), merged.nodes[0]).id;
+  }, [merged]);
+
+  // 实际生效的起点：自选的（且仍存在）优先，否则默认枢纽
+  const focusRootId = rootNodeId && merged.nodes.some((n: any) => n.id === rootNodeId)
+    ? rootNodeId : defaultRootId;
+
+  // 从起点 BFS 层数内的节点集合（null = 不过滤，显示全部）
+  const focusIds = useMemo(() => {
+    if (showAll || !focusCfgLoaded || !focusRootId) return null;
+    const adj: Record<string, string[]> = {};
+    for (const e of merged.edges) {
+      (adj[e.source] = adj[e.source] || []).push(e.target);
+      (adj[e.target] = adj[e.target] || []).push(e.source);
+    }
+    const ids = new Set<string>([focusRootId]);
+    let frontier = [focusRootId];
+    for (let d = 0; d < focusDepth; d++) {
+      const next: string[] = [];
+      for (const u of frontier) {
+        for (const v of adj[u] || []) {
+          if (!ids.has(v)) { ids.add(v); next.push(v); }
+        }
+      }
+      frontier = next;
+    }
+    return ids;
+  }, [merged, focusRootId, focusDepth, showAll, focusCfgLoaded]);
+
+  const activeFilterCount =
+    (searchText.trim() ? 1 : 0) + (selTags.length ? 1 : 0) + (selDiffs.length ? 1 : 0);
+
+  const filtered = useMemo(() => {
+    const kw = searchText.trim().toLowerCase();
+    const match = (n: any) => {
+      if (kw && !(
+        String(n.title || '').toLowerCase().includes(kw) ||
+        String(n.summary || '').toLowerCase().includes(kw) ||
+        (n.tags || []).some((t: string) => t.toLowerCase().includes(kw))
+      )) return false;
+      if (selTags.length && !(n.tags || []).some((t: string) => selTags.includes(t))) return false;
+      // AI 沉淀节点没有难度字段，统一按「未标注」参与筛选
+      if (selDiffs.length && !selDiffs.includes(n.difficulty || '未标注')) return false;
+      return true;
+    };
+    const nodes = merged.nodes.filter(n => (!focusIds || focusIds.has(n.id)) && match(n));
+    const ids = new Set(nodes.map(n => n.id));
+    const edges = merged.edges.filter((e: any) => ids.has(e.source) && ids.has(e.target));
+    return { nodes, edges, total: merged.nodes.length };
+  }, [merged, focusIds, searchText, selTags, selDiffs]);
+
+  const clearFilters = () => {
+    setSearchInput('');
+    setSearchText('');
+    setSelTags([]);
+    setSelDiffs([]);
+  };
 
   // 足迹/收藏/我的注解等入口跳转：/?node=<id> 直接打开那篇笔记
   const nodeParam = searchParams.get('node');
   useEffect(() => {
     if (nodeParam) setSelected(nodeParam);
   }, [nodeParam]);
-
-  // AI 助手沉淀写入图谱后，动态层立即刷新（无需手动刷新页面）
-  useEffect(() => {
-    if (!user) return;
-    const reload = () => api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
-    window.addEventListener('kg:ai-knowledge-updated', reload);
-    return () => window.removeEventListener('kg:ai-knowledge-updated', reload);
-  }, [user]);
-
-  // 加载注解
-  useEffect(() => {
-    if (selected && user) {
-      api.get(`/ai/annotations?nodeId=${selected}`).then(r => {
-        setAnnotations(r.data?.annotations || []);
-      }).catch(() => setAnnotations([]));
-    } else setAnnotations([]);
-  }, [selected, user, annKey]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -99,6 +223,15 @@ export default function GraphPage() {
     const stopPan = () => { panning = false; };
     zr.on('mouseup', stopPan);
     zr.on('globalout', stopPan);
+    // 点击节点打开笔记：绑定一次即可（setOption 会随筛选频繁重跑，放那边会重复叠加 handler）
+    chart.current.on('click', (p: any) => {
+      if (p.dataType === 'node') setSelected(p.data.value.id);
+    });
+    // 底部分类图例显隐：记录用户选择并持久化（setOption 更新 selected 不会再触发本事件，无循环）
+    chart.current.on('legendselectchanged', (p: any) => {
+      setLegendSelected(p.selected);
+      localStorage.setItem('kg.legend.selected', JSON.stringify(p.selected));
+    });
     window.addEventListener('resize', onResize);
     return () => { window.removeEventListener('resize', onResize); chart.current?.dispose(); };
   }, []);
@@ -106,16 +239,9 @@ export default function GraphPage() {
   useEffect(() => {
     if (!data || !chart.current) return;
     setLoading(false);
-    const allNodes = [...data.nodes];
-    const allEdges = [...data.edges];
-    if (aiData?.nodes) {
-      const knownIds = new Set(data.nodes.map(n => n.id));
-      allNodes.push(...aiData.nodes);
-      allEdges.push(...(aiData.edges || []).filter((e: any) =>
-        knownIds.has(e.source) || aiData.nodes.some((n: any) => n.id === e.source)));
-    }
+    // 节点大小按全量度数算，不随筛选变化跳尺寸
     const degrees: Record<string, number> = {};
-    for (const e of allEdges) {
+    for (const e of merged.edges) {
       degrees[e.source] = (degrees[e.source] || 0) + 1;
       degrees[e.target] = (degrees[e.target] || 0) + 1;
     }
@@ -146,65 +272,160 @@ export default function GraphPage() {
             '<br/><span style="color:#1677ff;font-size:11px">点击查看笔记</span>';
         },
       },
-      legend: { data: data.categories, bottom: 10 },
+      legend: { data: merged.categories, bottom: 10, selected: legendSelected },
       series: [{
         // roam 只保留滚轮缩放；拖拽平移由下方自实现（echarts 原生平移仅对节点团包围盒内生效，
         // 刚打开时节点聚在屏幕中央，画布边缘空白处按住拖不动）
         type: 'graph', layout: 'force', roam: 'scale', draggable: true,
-        categories: data.categories.map(name => ({ name })),
+        categories: merged.categories.map((name: string) => ({ name })),
         force: { repulsion: 480, edgeLength: 140, gravity: 0.08 },
         label: { show: true, fontSize: 12, color: '#1a1a1a' },
         emphasis: { focus: 'adjacency' },
-        data: allNodes.map(n => ({
+        data: filtered.nodes.map(n => ({
           id: n.id, name: (n.ai ? '✨ ' : '') + n.title,
           symbolSize: 30 + Math.min((degrees[n.id] || 0) * 7, 30),
-          value: n, category: data.categories.indexOf(n.category),
+          value: n, category: merged.categories.indexOf(n.category),
           itemStyle: { opacity: n.status === 'todo' ? 0.45 : 1 },
         })),
-        links: allEdges.map(e => ({
+        links: filtered.edges.map(e => ({
           source: e.source, target: e.target,
           lineStyle: { color: '#b3bac6', width: 1.5, opacity: 0.6, curveness: 0.12 },
         })),
       }],
     }, true);
-    chart.current.on('click', (p: any) => {
-      if (p.dataType === 'node') setSelected(p.data.value.id);
-    });
-  }, [data, aiData]);
-
-  const node = data?.nodes.find(n => n.id === selected) || aiData?.nodes?.find((n: any) => n.id === selected);
-
-  const setLevel = async (refId: string, level: number) => {
-    setProgress(prev => ({ ...prev, [refId]: level }));
-    await api.put('/progress', { nodeId: refId, level });
-  };
-
-  // 关联节点
-  const linkedNodes = node?.links
-    ?.map((id: string) => {
-      const linked = data?.nodes.find(n => n.id === id) || aiData?.nodes?.find((n: any) => n.id === id);
-      return linked ? { id, title: linked.title } : null;
-    })
-    ?.filter(Boolean) || [];
+  }, [data, merged, filtered, legendSelected]);
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
+    <div style={{ display: 'flex', position: 'relative', height: 'calc(100vh - 56px)' }}>
       <div ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
 
-      <KnowledgeDrawer
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        nodeId={selected || ''}
-        nodeData={node}
-        level={selected ? (progress[selected] || 0) : 0}
-        onLevelChange={user ? setLevel : undefined}
-        linkedNodes={linkedNodes}
-        onOpenLinked={(refId) => setSelected(refId)}
-        isLoggedIn={!!user}
-        userRole={user?.role}
-        annotations={annotations}
-        onAnnotationSaved={() => setAnnKey(k => k + 1)}
-      />
+      {/* 筛选浮条：默认折叠收起，按钮上徽标显示生效的筛选条件数；容器不拦截图谱拖拽 */}
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, display: 'flex', alignItems: 'flex-start', gap: 8, maxWidth: 'calc(100% - 24px)', pointerEvents: 'none' }}>
+        <Tooltip title="图谱太大看不过来？设一个起点，只看从它出发几层以内的知识">
+          <Popover
+            trigger="click" placement="bottomLeft"
+            title="🌱 图谱起点（从哪开始看）"
+            content={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 320 }}>
+                <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                  只显示「从起点出发、指定层数以内」的知识点（顺着连线数几步）。选择会自动保存，换设备登录也在。
+                </div>
+                <div>
+                  <div style={{ marginBottom: 4 }}>起点知识</div>
+                  <Select
+                    showSearch allowClear
+                    placeholder="搜索并选择一篇知识作起点"
+                    value={focusRootId}
+                    onChange={(id) => saveFocus(id || null, focusDepth)}
+                    options={merged.nodes.map((n: any) => ({ value: n.id, label: n.title }))}
+                    style={{ width: '100%' }}
+                  />
+                  {!rootNodeId && (
+                    <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+                      还没自选，当前默认用全图连线最多的枢纽节点当起点
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ marginBottom: 4 }}>显示层数（顺着关联走几步）</div>
+                  <Segmented
+                    block
+                    value={focusDepth}
+                    options={[{ label: '2 层', value: 2 }, { label: '3 层', value: 3 }, { label: '4 层', value: 4 }]}
+                    onChange={(v) => saveFocus(rootNodeId, v as number)}
+                  />
+                </div>
+                <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                  当前{showAll ? '显示全图' : '聚焦'} {showAll ? merged.nodes.length : (focusIds?.size ?? merged.nodes.length)} 篇 / 全图 {merged.nodes.length} 篇
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button size="small" onClick={() => setShowAll(v => !v)}>
+                    {showAll ? '↩ 回到聚焦视图' : '👁 临时看全部'}
+                  </Button>
+                  <Button size="small" disabled={!rootNodeId} onClick={() => saveFocus(null, focusDepth)}>
+                    恢复默认起点
+                  </Button>
+                </div>
+              </div>
+            }
+          >
+            <Button
+              style={{ pointerEvents: 'auto', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+              type={showAll ? 'default' : 'primary'} ghost={!showAll}
+            >
+              🌱 {showAll ? '看全部' : `起点 · ${focusDepth} 层`}
+            </Button>
+          </Popover>
+        </Tooltip>
+        <Tooltip title="按关键词、标签、难度缩小图谱范围，只看想看的笔记；再点一次收起来">
+          <Badge count={activeFilterCount} size="small" offset={[-4, 4]}>
+            <Button
+              icon={<FilterOutlined />}
+              onClick={() => setFilterOpen(v => !v)}
+              style={{ pointerEvents: 'auto', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+            >
+              筛选 {filterOpen ? '▴' : '▾'}
+            </Button>
+          </Badge>
+        </Tooltip>
+        {filterOpen && (
+          <div style={{
+            pointerEvents: 'auto', background: '#fff', borderRadius: 10,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.12)', padding: '10px 12px',
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', maxWidth: 820,
+          }}>
+            <Input
+              allowClear
+              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+              placeholder="搜标题、摘要或标签"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              style={{ width: 200 }}
+            />
+            <Tooltip title="可多选：笔记带其中任意一个标签就显示">
+              <Select
+                mode="multiple" allowClear maxTagCount="responsive"
+                placeholder="按标签筛（可多选）"
+                value={selTags}
+                onChange={setSelTags}
+                options={(data?.allTags || []).map((t: any) => ({ value: t.tag, label: `${t.tag}（${t.count}）` }))}
+                style={{ minWidth: 220, maxWidth: 360 }}
+              />
+            </Tooltip>
+            <Tooltip title="入门=新手也能懂；进阶=需要一些基础；深入=老手进阶用；未标注=还没标难度的笔记和 ✨ AI 沉淀">
+              <Select
+                mode="multiple" allowClear maxTagCount="responsive"
+                placeholder="按难度筛（可多选）"
+                value={selDiffs}
+                onChange={setSelDiffs}
+                options={DIFFICULTY_OPTIONS}
+                style={{ minWidth: 170 }}
+              />
+            </Tooltip>
+            <Tooltip title="去掉全部筛选条件，看回所有笔记">
+              <Button onClick={clearFilters}>清空筛选</Button>
+            </Tooltip>
+            <span style={{ color: filtered.nodes.length ? '#8c8c8c' : '#cf1322', fontSize: 12, whiteSpace: 'nowrap' }}>
+              {filtered.nodes.length
+                ? `命中 ${filtered.nodes.length} / 共 ${filtered.total} 篇`
+                : `没有匹配的笔记（共 ${filtered.total} 篇），换个条件或清空试试`}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 筛选生效但一篇都没命中时，画布中央给个提示 */}
+      {data && activeFilterCount > 0 && filtered.nodes.length === 0 && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          color: '#8c8c8c', fontSize: 14, pointerEvents: 'none',
+        }}>
+          没有匹配的笔记，换个关键词或「清空筛选」试试
+        </div>
+      )}
+
+      {/* 笔记浮窗（数据查找/注解/学习程度封装在 NodeReadDrawer，与知识库页共用） */}
+      <NodeReadDrawer open={!!selected} onClose={() => setSelected(null)} nodeId={selected} />
 
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%' }}><Spin size="large" /></div>}
     </div>

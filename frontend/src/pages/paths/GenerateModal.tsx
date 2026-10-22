@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Modal, Input, Button, Tag, Collapse, message, Progress } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
+import { trackLlmCall } from '../../utils/llmQueueNotice';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -97,9 +98,9 @@ export default function GenerateModal({
         Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
       };
       const payload = pathId ? { pathId, feedback: text } : { goal: text };
-      const r = await fetch('/api/ai/paths/generate', {
+      const r = await trackLlmCall(fetch('/api/ai/paths/generate', {
         method: 'POST', headers, body: JSON.stringify(payload),
-      });
+      }));
       const d = await r.json();
       setGenDone(true);
       setTimeout(() => setGenerating(false), 600);

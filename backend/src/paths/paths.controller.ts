@@ -1,14 +1,16 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req,
   BadRequestException, NotFoundException, ForbiddenException, Res,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { abortSignalFromClient } from '../llm/llm-queue';
+import { joinFlight, finishFlight } from '../llm/sse-flight';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 
 const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师。基于图谱里已有的知识点清单和用户的学习目标，规划一条阶段清晰、可执行的学习路线。
@@ -27,7 +29,7 @@ export class PathsController {
   ) {}
 
   @Post('ai/paths/generate')
-  async generate(@Body() body: any, @CurrentUser() user: CurrentUserType) {
+  async generate(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const goal = String(body.goal || '').trim().slice(0, 300);
     const feedback = String(body.feedback || '').trim().slice(0, 500);
     if (!goal && !feedback) throw new BadRequestException('请填写学习目标或调整要求');
@@ -45,12 +47,19 @@ export class PathsController {
     if (body.pathId) {
       const existing = await this.prisma.learningPath.findUnique({ where: { id: Number(body.pathId) } });
       if (!existing) throw new NotFoundException('要调整的路线不存在');
+      if (!existing.isOfficial && existing.createdBy !== user.username && user.role !== 'admin') {
+        throw new ForbiddenException('只能调整官方路线或自己创建的路线');
+      }
       prompt += `【已有路线 JSON】\n${existing.tree}\n\n【用户调整要求】\n${feedback || goal}`;
     } else {
       prompt += `【用户学习目标】\n${goal}`;
     }
 
-    const r = await this.llm.chatText(model, { system: PATH_SYSTEM, user: prompt, timeoutMs: 240 * 1000 });
+    const r = await this.llm.chatText(model, {
+      system: PATH_SYSTEM, user: prompt, timeoutMs: 240 * 1000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
+    });
     if (!r.ok) throw new BadRequestException('生成失败：' + r.error);
     try {
       const start = r.text.indexOf('{'); const end = r.text.lastIndexOf('}');
@@ -74,9 +83,11 @@ export class PathsController {
     }
   }
 
+  /** 列表只返回官方路线 + 本人创建的路线（私人路线对其他用户不可见；管理页走 admin/paths 看全量） */
   @Get('ai/paths')
   async list(@CurrentUser() user: CurrentUserType) {
     const rows = await this.prisma.learningPath.findMany({
+      where: { OR: [{ isOfficial: 1 }, { createdBy: user.username }] },
       orderBy: [{ isOfficial: 'desc' }, { id: 'desc' }], take: 100,
     });
     return {
@@ -103,9 +114,26 @@ export class PathsController {
     return { path: { id: r.id, title } };
   }
 
+  /** 单条路线详情：官方路线任何人可读，私人路线仅创建者与管理员（管理页「学习路线」查看用） */
+  @Get('ai/paths/:id')
+  async detail(@Param('id') id: number, @CurrentUser() user: CurrentUserType) {
+    const r = await this.prisma.learningPath.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('路线不存在');
+    if (!r.isOfficial && r.createdBy !== user.username && user.role !== 'admin') {
+      throw new ForbiddenException('该路线仅创建者可见');
+    }
+    let t: any = null;
+    try { t = JSON.parse(r.tree); } catch {}
+    return {
+      id: r.id, title: r.title, goal: r.goal, tree: t,
+      summary: t?.summary || '', stageCount: t?.stages?.length || 0,
+      isOfficial: !!r.isOfficial, createdBy: r.createdBy, createdAt: r.createdAt,
+    };
+  }
+
   /** AI 智能扩展路线：将一个新知识点插入路线树最合适的位置 */
   @Post('ai/paths/:id/extend')
-  async extend(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType) {
+  async extend(@Param('id') id: number, @Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const row = await this.prisma.learningPath.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('路线不存在');
     if (row.createdBy !== user.username && user.role !== 'admin') {
@@ -147,7 +175,11 @@ id: ${nodeId}
 
 请将这个知识点插入路线中最合适的位置，输出更新后的完整 JSON。`;
 
-    const r = await this.llm.chatText(model, { system, user: userPrompt, timeoutMs: 180_000 });
+    const r = await this.llm.chatText(model, {
+      system, user: userPrompt, timeoutMs: 180_000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
+    });
     if (!r.ok) throw new BadRequestException('AI 整合失败：' + r.error);
 
     // 解析并校验
@@ -185,6 +217,7 @@ id: ${nodeId}
    * 新主题懒加载生成（SSE 流式）：点击路线上未关联知识点的「新主题」时，
    * 按路线上下文流式生成一篇 markdown 学习内容；生成完写入路线树 JSON 缓存（item.content），
    * 下次点击直接命中缓存不再调模型。force=true 可重新生成覆盖。
+   * 同一主题的生成**进行中**时其他用户点击不重复调模型，实时共享同一次流式输出（sse-flight 合并）。
    */
   @Post('ai/paths/:id/topic-content')
   async topicContent(
@@ -195,6 +228,9 @@ id: ${nodeId}
   ) {
     const row = await this.prisma.learningPath.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('路线不存在');
+    if (!row.isOfficial && row.createdBy !== user.username && user.role !== 'admin') {
+      throw new ForbiddenException('只能为官方路线或自己创建的路线生成内容');
+    }
     const stageIdx = Number(body.stageIdx);
     const itemPath: number[] = Array.isArray(body.itemPath) ? body.itemPath.map(Number) : [];
     if (!Number.isInteger(stageIdx) || stageIdx < 0 || !itemPath.length || itemPath.some(i => !Number.isInteger(i) || i < 0)) {
@@ -257,15 +293,45 @@ ${lines.join('\n')}
 
 请为主题「${item.title}」写这篇学习笔记。`;
 
+    // 进行中合并：别的用户正在生成同一主题时不再重复排队/调模型，实时共享同一次流式输出
+    const flightKey = `topic:${id}:${stageIdx}:${itemPath.join('.')}`;
+    const { flight, owner } = joinFlight(flightKey);
+    flight.addViewer();
+
+    if (!owner) {
+      // 后来者：先补发已生成的内容，再实时跟随增量，拿到终态（result/error）后结束连接
+      const off = flight.subscribe(ev => {
+        if (ev.type === 'delta') send('delta', { text: ev.text });
+        else if (ev.type === 'queued') send('queued', { ahead: ev.ahead, etaSeconds: ev.etaSeconds, modelName: ev.modelName });
+        else if (ev.type === 'start') send('start', {});
+        else if (ev.type === 'done') { off(); send('result', { content: flight.text, cached: false }); done(); }
+        else if (ev.type === 'error') { off(); send('error', { error: ev.error }); done(); }
+      });
+      // 连接断开只退订自己；所有观看者都断开时由飞行中止上游生成
+      res.on('close', () => { off(); flight.removeViewer(); });
+      return;
+    }
+
+    // 发起者：真正调模型；取消信号绑定整个飞行——所有观看者（含自己）断开才中止
+    res.on('close', () => flight.removeViewer());
     try {
       const r = await this.llm.chatStream(model, {
         system,
         messages: [{ role: 'user', content: userPrompt }],
-        onDelta: t => send('delta', { text: t }),
+        userId: user.id,
+        username: user.username,
+        clientSignal: flight.signal,
+        onQueued: info => {
+          send('queued', { ahead: info.ahead, etaSeconds: info.etaSeconds, modelName: model.name || model.modelId });
+          flight.emit({ type: 'queued', ahead: info.ahead, etaSeconds: info.etaSeconds, modelName: model.name || model.modelId });
+        },
+        onStart: () => { send('start', {}); flight.emit({ type: 'start' }); },
+        onDelta: t => { send('delta', { text: t }); flight.emit({ type: 'delta', text: t }); },
         timeoutMs: 240 * 1000,
       });
       if (!r.ok) {
         send('error', { error: r.error || '生成失败' });
+        flight.emit({ type: 'error', error: r.error || '生成失败' });
       } else {
         // 回填缓存：重新读最新树再写入，尽量不覆盖他人并发改动；只填 content 不动其他字段
         const latest = await this.prisma.learningPath.findUnique({ where: { id } });
@@ -279,7 +345,7 @@ ${lines.join('\n')}
             }
           } catch { /* 缓存写失败不影响返回 */ }
         }
-        // 记录 LLM 用量（token 按文本长度/4 粗估）
+        // 记录 LLM 用量（token 按文本长度/4 粗估；一次生成多方共享只记一次）
         this.prisma.llmUsage.create({
           data: {
             userId: user.id, username: user.username,
@@ -289,10 +355,13 @@ ${lines.join('\n')}
           },
         }).catch(() => {});
         send('result', { content: r.text, cached: false });
+        flight.emit({ type: 'done' });
       }
     } catch (e: any) {
       send('error', { error: String(e?.message || e) });
+      flight.emit({ type: 'error', error: String(e?.message || e) });
     } finally {
+      finishFlight(flightKey, flight);
       done();
     }
   }

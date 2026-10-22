@@ -1,11 +1,13 @@
 import {
-  Controller, Get, Post, Body, Param, Query, UseGuards, BadRequestException, NotFoundException,
+  Controller, Get, Post, Body, Param, Query, UseGuards, Req, BadRequestException, NotFoundException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { abortSignalFromClient } from '../llm/llm-queue';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Controller()
@@ -40,6 +42,9 @@ export class SubmissionsController {
     const q = body.questionId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } }) : null;
     const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
     if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
+    // 会话个人可见：只能沉淀自己会话里的问答（防拿别人 messageId 越权提交）
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: q.chatId } });
+    if (!chat || chat.createdBy !== user.username) throw new BadRequestException('只能沉淀自己会话里的问答');
     const importance = Number(body.importance);
     if (!Number.isInteger(importance) || importance < 1 || importance > 5) throw new BadRequestException('重要星级需为 1–5');
     const r = await this.prisma.depositSubmission.create({
@@ -67,7 +72,7 @@ export class SubmissionsController {
   // ===== 沉淀预览与直写（管理员用） =====
   @Post('ai/knowledge/preview')
   @Roles('admin')
-  async preview(@Body() body: any) {
+  async preview(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const q = body.questionId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } }) : null;
     const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
     if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
@@ -87,6 +92,8 @@ content 写法：大白话直白表述，术语第一次出现紧跟括号翻译
       system,
       user: `已有知识点清单：\n${lines.join('\n')}\n\n新问答：\n【问题】\n${q.content}\n\n【回答】\n${a.content}`,
       timeoutMs: 180 * 1000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
     });
     if (!r.ok) throw new BadRequestException('整合判断失败：' + r.error);
     try {
@@ -163,7 +170,7 @@ content 写法：大白话直白表述，术语第一次出现紧跟括号翻译
 
   @Post('admin/submissions/:id/extract')
   @Roles('admin')
-  async extract(@Param('id') id: number) {
+  async extract(@Param('id') id: number, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const row = await this.prisma.depositSubmission.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('提交不存在');
     if (row.status !== 'pending') throw new BadRequestException('该提交已处理过');
@@ -182,6 +189,8 @@ content 写法：大白话直白表述，术语第一次出现紧跟括号翻译
       system,
       user: `已有知识点清单：\n${lines.join('\n')}\n\n【问题】\n${row.questionText}\n\n【回答】\n${row.answerText}`,
       timeoutMs: 180 * 1000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
     });
     if (!r.ok) throw new BadRequestException('提取失败：' + r.error);
     const start = r.text.indexOf('{'); const end = r.text.lastIndexOf('}');

@@ -1,12 +1,15 @@
 import {
-  Controller, Get, Post, Delete, Body, Query, Param, UseGuards, BadRequestException, NotFoundException, ForbiddenException,
+  Controller, Get, Post, Delete, Body, Query, Param, UseGuards, Req, BadRequestException, NotFoundException, ForbiddenException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { Res } from '@nestjs/common';
 import { normalizeProfileTags } from '../auth/profile-tags.util';
+import { abortSignalFromClient } from '../llm/llm-queue';
+import { joinFlight, finishFlight } from '../llm/sse-flight';
 
 // 用户划词可创建的类型；interview 不在其中（面试题只由懒加载/管理页批量生成，不走用户审核流）
 const ANNO_TYPES = ['word', 'sentence', 'paragraph', 'document'];
@@ -16,12 +19,24 @@ const ANNO_TYPES = ['word', 'sentence', 'paragraph', 'document'];
 export class AnnotationsController {
   constructor(private prisma: PrismaService) {}
 
-  private pub(r: any) {
+  /** 用户名 → 展示名映射（昵称优先，无昵称回退登录账号；权限判断仍用 createdBy 原值） */
+  private async displayNameMap(usernames: Array<string | null | undefined>): Promise<Map<string, string>> {
+    const names = [...new Set(usernames.filter((n): n is string => !!n))];
+    if (!names.length) return new Map();
+    const rows = await this.prisma.user.findMany({
+      where: { username: { in: names } },
+      select: { username: true, nickname: true },
+    });
+    return new Map(rows.map(u => [u.username, u.nickname || u.username]));
+  }
+
+  private pub(r: any, names?: Map<string, string>) {
     return {
       id: r.id, nodeId: r.nodeId, anchorText: r.anchorText, anchorContext: r.anchorContext,
       anchorIndex: r.anchorIndex, type: r.type, question: r.question, answer: r.answer,
       status: r.status, rejectReason: r.rejectReason,
       createdBy: r.createdBy, createdAt: r.createdAt, decidedBy: r.decidedBy,
+      displayName: names?.get(r.createdBy) || r.createdBy,
       profileTags: (()=>{try{return normalizeProfileTags(JSON.parse(r.profileTags||'{}'))}catch{return{level:'novice',focus:[]}}})(),
     };
   }
@@ -34,7 +49,6 @@ export class AnnotationsController {
     const nodeTitle = String(body.nodeTitle || '').trim().slice(0, 200);
     const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
     if (!question) throw new BadRequestException('请输入问题');
-
     const model = await this.prisma.llmModel.findFirst({ where: { isGlobal: 1, status: 'enabled' } });
     if (!model) throw new BadRequestException('尚未配置全局默认模型');
 
@@ -60,10 +74,20 @@ export class AnnotationsController {
       try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
     };
     const hb = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 10000);
+    // 页面/浏览器关闭时中止本次调用：排队中出队，运行中停掉上游请求并立刻释放并发额度
+    const clientAbort = new AbortController();
+    res.on('close', () => clientAbort.abort());
 
     try {
       const r = await llm.chatStream(model as any, {
         system, messages: msgs,
+        userId: user.id, username: user.username,
+        clientSignal: clientAbort.signal,
+        onQueued: info => send('queued', {
+          ahead: info.ahead, etaSeconds: info.etaSeconds,
+          modelName: model.name || model.modelId,
+        }),
+        onStart: () => send('start', {}),
         onDelta: (t: string) => send('delta', { text: t }),
         onThinking: (t: string) => send('thinking', { text: t }),
       });
@@ -79,7 +103,7 @@ export class AnnotationsController {
 
   /** AI 提炼：把多轮对话蒸馏成一条简洁注解 */
   @Post('distill')
-  async distill(@Body() body: any, @CurrentUser() user: CurrentUserType) {
+  async distill(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const anchorText = String(body.anchorText || '').trim().slice(0, 1000);
     const nodeTitle = String(body.nodeTitle || '').trim().slice(0, 200);
     const messages = Array.isArray(body.messages) ? body.messages : [];
@@ -99,6 +123,8 @@ export class AnnotationsController {
       system: `你是注解蒸馏助手。用户就一段选中文本进行了多轮问答，你要把全部信息蒸馏成一条简洁、直白的「注解」（≤300字）：第一句大白话说清它是什么，术语第一次出现括号翻译，不堆术语不写空话，供其他读者快速理解。只输出注解正文。`,
       user: `【所在知识点】${nodeTitle}\n【选中的原文】\n${anchorText || '（整篇）'}\n\n【对话记录】\n${transcript}`,
       timeoutMs: 120_000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
     });
     if (!r.ok) throw new BadRequestException('提炼失败：' + r.error);
     return { answer: r.text };
@@ -108,6 +134,7 @@ export class AnnotationsController {
    * 面试题懒加载生成（SSE 流式）：知识弹窗里点击「💼 高频面试题」而该笔记还没有面试题注解时，
    * 按笔记内容流式生成一套面试题——前端边流边按 markdown 渲染；生成完直接存 approved 共享
    * （AI 生成的参考内容，同管理页批量生成，不走用户注解审核流），下次点击直接读缓存不调模型。
+   * 同一篇的生成**进行中**时其他用户点击不重复调模型，实时共享同一次流式输出（sse-flight 合并）。
    */
   @Post('interview/generate')
   async generateInterview(@Body() body: any, @CurrentUser() user: CurrentUserType, @Res() res: any) {
@@ -153,15 +180,44 @@ export class AnnotationsController {
     const system = `你是资深大模型技术面试官。基于笔记内容出一套「高频面试题」：4~6 道题，每题先提问再给 2~4 句参考答案（只用笔记里的知识）。参考答案要直白：第一句直接给出答案要点，再补关键细节；术语第一次出现用括号说清大白话意思；不写空话套话。markdown 编号列表输出。`;
     const userPrompt = `【笔记标题】${note.title}\n\n【笔记正文】\n${note.content}`;
 
+    // 进行中合并：别的用户正在生成同一篇时不再重复排队/调模型，实时共享同一次流式输出
+    const flightKey = `interview:${nodeId}`;
+    const { flight, owner } = joinFlight(flightKey);
+    flight.addViewer();
+
+    if (!owner) {
+      // 后来者：先补发已生成的内容，再实时跟随增量，拿到终态（result/error）后结束连接
+      const off = flight.subscribe(ev => {
+        if (ev.type === 'delta') send('delta', { text: ev.text });
+        else if (ev.type === 'queued') send('queued', { ahead: ev.ahead, etaSeconds: ev.etaSeconds, modelName: ev.modelName });
+        else if (ev.type === 'start') send('start', {});
+        else if (ev.type === 'done') { off(); send('result', { content: flight.text, cached: false }); done(); }
+        else if (ev.type === 'error') { off(); send('error', { error: ev.error }); done(); }
+      });
+      // 连接断开只退订自己；所有观看者都断开时由飞行中止上游生成
+      res.on('close', () => { off(); flight.removeViewer(); });
+      return;
+    }
+
+    // 发起者：真正调模型；取消信号绑定整个飞行——所有观看者（含自己）断开才中止
+    res.on('close', () => flight.removeViewer());
     try {
       const r = await llm.chatStream(model, {
         system,
         messages: [{ role: 'user', content: userPrompt }],
-        onDelta: t => send('delta', { text: t }),
+        userId: user.id, username: user.username,
+        clientSignal: flight.signal,
+        onQueued: info => {
+          send('queued', { ahead: info.ahead, etaSeconds: info.etaSeconds, modelName: model.name || model.modelId });
+          flight.emit({ type: 'queued', ahead: info.ahead, etaSeconds: info.etaSeconds, modelName: model.name || model.modelId });
+        },
+        onStart: () => { send('start', {}); flight.emit({ type: 'start' }); },
+        onDelta: t => { send('delta', { text: t }); flight.emit({ type: 'delta', text: t }); },
         timeoutMs: 240 * 1000,
       });
       if (!r.ok) {
         send('error', { error: r.error || '生成失败' });
+        flight.emit({ type: 'error', error: r.error || '生成失败' });
       } else {
         // 覆盖旧的 AI 生成版（build 提取的 system 注解不动）
         await this.prisma.annotation.deleteMany({
@@ -184,16 +240,19 @@ export class AnnotationsController {
           },
         }).catch(() => {});
         send('result', { content: r.text, cached: false });
+        flight.emit({ type: 'done' });
       }
     } catch (e: any) {
       send('error', { error: String(e?.message || e) });
+      flight.emit({ type: 'error', error: String(e?.message || e) });
     } finally {
+      finishFlight(flightKey, flight);
       done();
     }
   }
 
   @Post('ask')
-  async ask(@Body() body: any, @CurrentUser() user: CurrentUserType) {
+  async ask(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
     const anchorText = String(body.anchorText || '').trim().slice(0, 1000);
     const question = String(body.question || '').trim().slice(0, 500);
     if (!anchorText && !question) throw new BadRequestException('请先选中文字或填写问题');
@@ -209,6 +268,8 @@ export class AnnotationsController {
       system,
       user: `【所在知识点】${body.nodeTitle || '（未指定）'}\n【选中的原文】\n${anchorText || '（整篇，未选中具体文字）'}\n\n【用户的问题】\n${question || '解释一下：' + anchorText}`,
       timeoutMs: 180 * 1000,
+      userId: user.id, username: user.username,
+      clientSignal: abortSignalFromClient(req),
     });
     if (!r.ok) throw new BadRequestException('解答生成失败：' + r.error);
     return { answer: r.text };
@@ -234,7 +295,7 @@ export class AnnotationsController {
         profileTags: JSON.stringify(user.profileTags),
       },
     });
-    return { annotation: this.pub(r) };
+    return { annotation: this.pub(r, new Map([[user.username, user.nickname || user.username]])) };
   }
 
   /** 我的注解：当前用户沉淀过的全部注解（含待审核/被驳回），跨节点汇总 */
@@ -252,8 +313,9 @@ export class AnnotationsController {
       ...notes.map(n => [n.id, n.title] as [string, string]),
       ...aiNodes.map(n => [n.id, n.title] as [string, string]),
     ]);
+    const names = await this.displayNameMap(rows.map(r => r.createdBy));
     return {
-      annotations: rows.map(r => ({ ...this.pub(r), nodeTitle: titles.get(r.nodeId) || '' })),
+      annotations: rows.map(r => ({ ...this.pub(r, names), nodeTitle: titles.get(r.nodeId) || '' })),
     };
   }
 
@@ -264,7 +326,8 @@ export class AnnotationsController {
       where: { nodeId }, orderBy: { id: 'asc' },
     });
     const visible = rows.filter(r => r.status === 'approved' || r.createdBy === user.username);
-    return { annotations: visible.map(r => this.pub(r)) };
+    const names = await this.displayNameMap(visible.map(r => r.createdBy));
+    return { annotations: visible.map(r => this.pub(r, names)) };
   }
 
   @Delete(':id')
@@ -280,11 +343,12 @@ export class AnnotationsController {
 
   // ========== 注解讨论区：针对整条注解的 AI 提问与人工评论（即时全员可见，不走审核） ==========
 
-  private pubReply(r: any) {
+  private pubReply(r: any, names?: Map<string, string>) {
     return {
       id: r.id, annotationId: r.annotationId, kind: r.kind,
       question: r.question, content: r.content,
       createdBy: r.createdBy, createdAt: r.createdAt,
+      displayName: names?.get(r.createdBy) || r.createdBy,
     };
   }
 
@@ -304,7 +368,8 @@ export class AnnotationsController {
     const rows = await this.prisma.annotationReply.findMany({
       where: { annotationId: id }, orderBy: { id: 'asc' }, take: 200,
     });
-    return { replies: rows.map(r => this.pubReply(r)) };
+    const names = await this.displayNameMap(rows.map(r => r.createdBy));
+    return { replies: rows.map(r => this.pubReply(r, names)) };
   }
 
   /** 发表评论：纯手写文字，即时全员可见 */
@@ -316,7 +381,7 @@ export class AnnotationsController {
     const r = await this.prisma.annotationReply.create({
       data: { annotationId: id, kind: 'comment', content, createdBy: user.username },
     });
-    return { reply: this.pubReply(r) };
+    return { reply: this.pubReply(r, new Map([[user.username, user.nickname || user.username]])) };
   }
 
   /**
@@ -343,6 +408,9 @@ export class AnnotationsController {
       try { res.write(': ping\n\n'); } catch { /* ignore */ }
     }, 10000);
     const done = () => { clearInterval(heartbeat); res.end(); };
+    // 页面/浏览器关闭时中止本次解答：排队中出队，运行中停掉上游请求并立刻释放并发额度
+    const clientAbort = new AbortController();
+    res.on('close', () => clientAbort.abort());
 
     const { LlmService } = await import('../llm/llm.service');
     const llm = new LlmService(this.prisma);
@@ -362,6 +430,13 @@ export class AnnotationsController {
       const r = await llm.chatStream(model, {
         system,
         messages: [{ role: 'user', content: userPrompt }],
+        userId: user.id, username: user.username,
+        clientSignal: clientAbort.signal,
+        onQueued: info => send('queued', {
+          ahead: info.ahead, etaSeconds: info.etaSeconds,
+          modelName: model.name || model.modelId,
+        }),
+        onStart: () => send('start', {}),
         onDelta: t => send('delta', { text: t }),
         timeoutMs: 240 * 1000,
       });
@@ -383,7 +458,7 @@ export class AnnotationsController {
             outputTokens: Math.ceil(r.text.length / 4),
           },
         }).catch(() => {});
-        send('result', { reply: this.pubReply(row) });
+        send('result', { reply: this.pubReply(row, new Map([[user.username, user.nickname || user.username]])) });
       }
     } catch (e: any) {
       send('error', { error: String(e?.message || e) });

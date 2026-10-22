@@ -5,7 +5,7 @@ import { fmtShort } from '../utils/format';
 
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
-/** 顶栏「⭐ 收藏」：我的收藏弹窗（点击打开笔记、可取消收藏） */
+/** 顶栏「⭐ 收藏」：我的收藏弹窗（点击整行原地打开笔记浮窗、不跳转图谱页；行尾 ⭐ 取消收藏） */
 export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
@@ -47,16 +47,17 @@ export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: st
             dataSource={rows}
             locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有收藏，在笔记面板标题旁点 ☆ 收藏" /> }}
             renderItem={(r: any) => (
-              <List.Item style={{ padding: '7px 4px' }}
+              <List.Item
+                style={{ cursor: 'pointer', padding: '7px 4px' }}
+                onClick={() => { setOpen(false); onOpenNode(r.nodeId); }}
                 actions={[
                   <Tooltip key="del" title="取消收藏">
                     <Button type="text" size="small" danger icon={<StarFilled />}
-                      onClick={() => unfavorite(r.nodeId)} />
+                      onClick={(e) => { e.stopPropagation(); unfavorite(r.nodeId); }} />
                   </Tooltip>,
                 ]}
               >
-                <div style={{ cursor: 'pointer', minWidth: 0 }}
-                  onClick={() => { setOpen(false); onOpenNode(r.nodeId); }}>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {r.title}
                   </div>

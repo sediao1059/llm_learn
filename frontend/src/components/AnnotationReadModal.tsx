@@ -3,16 +3,19 @@ import { Modal, Button, Tag, Input, Divider, Popconfirm, Segmented, Spin, messag
 import MarkdownContent from './MarkdownContent';
 import { fmtShort } from '../utils/format';
 import { useAuth } from '../store/auth';
+import { showQueuedNotice, hideQueueNotice } from '../utils/llmQueueNotice';
 
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
 /**
  * 注解阅读弹窗（点正文荧光高亮 / 兜底条目打开）：引用原文 + 问题 + markdown 答案，
  * 下方是知乎式讨论区——针对整条注解向 AI 提问（SSE 流式，问答对沉淀共享）或发表评论。
+ * 面试题注解可由管理员从底部「重新生成」覆盖 AI 版（传入 onRegenerateInterview 时显示按钮）。
  */
-export default function AnnotationReadModal({ anno, onClose }: {
+export default function AnnotationReadModal({ anno, onClose, onRegenerateInterview }: {
   anno: any;
   onClose: () => void;
+  onRegenerateInterview?: () => void;
 }) {
   const user = useAuth(s => s.user);
   const [replies, setReplies] = useState<any[]>([]);
@@ -112,6 +115,10 @@ export default function AnnotationReadModal({ anno, onClose }: {
             if (ev === 'delta' && payload.text) {
               full += payload.text;
               setAskAnswer(full);
+            } else if (ev === 'queued') {
+              showQueuedNotice(payload);
+            } else if (ev === 'start') {
+              hideQueueNotice();
             } else if (ev === 'result' && payload.reply) {
               setReplies(prev => [...prev, payload.reply]);
               setQuestion('');
@@ -131,6 +138,7 @@ export default function AnnotationReadModal({ anno, onClose }: {
     } catch (e: any) {
       if (e?.name !== 'AbortError') setAskError(e.message || '生成失败');
     } finally {
+      hideQueueNotice();
       setAsking(false);
     }
   };
@@ -157,7 +165,20 @@ export default function AnnotationReadModal({ anno, onClose }: {
       onCancel={close}
       title="💬 注解阅读"
       width={640}
-      footer={<Button onClick={close}>关闭</Button>}
+      footer={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {anno?.type === 'interview' && user?.role === 'admin' && onRegenerateInterview && (
+            <Popconfirm
+              title="重新生成一套？"
+              description="会覆盖当前 AI 生成的版本（笔记里 build 提取的原版不受影响）"
+              onConfirm={onRegenerateInterview}
+            >
+              <Button size="small">重新生成</Button>
+            </Popconfirm>
+          )}
+          <Button size="small" type="primary" onClick={close} style={{ marginLeft: 'auto' }}>关闭</Button>
+        </div>
+      }
       maskClosable={!asking}
       keyboard={!asking}
     >
@@ -174,7 +195,7 @@ export default function AnnotationReadModal({ anno, onClose }: {
                 {anno.status === 'pending' ? '待审核（仅自己可见）' : '已驳回'}
               </Tag>
             )}
-            <span style={{ fontSize: 12, color: '#bfbfbf', marginLeft: 'auto' }}>{anno.createdBy}</span>
+            <span style={{ fontSize: 12, color: '#bfbfbf', marginLeft: 'auto' }}>{anno.displayName || anno.createdBy}</span>
           </div>
           {anno.anchorText && (
             <div style={{
@@ -204,8 +225,8 @@ export default function AnnotationReadModal({ anno, onClose }: {
             ) : replies.map((r: any) => (
               <div key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8c8c8c' }}>
-                  <b style={{ color: '#595959' }}>{r.createdBy}</b>
-                  {r.kind === 'qa' ? '向 AI 提问' : '评论'} · {fmtShort(r.createdAt)}
+                  <b style={{ color: '#595959' }}>{r.displayName || r.createdBy}</b>
+                  {r.kind === 'qa' ? ' 向 AI 提问' : ' 评论'} · {fmtShort(r.createdAt)}
                   {canDelete(r) && (
                     <Popconfirm title="删除这条讨论内容？" onConfirm={() => delReply(r)}>
                       <a style={{ marginLeft: 'auto', fontSize: 12 }}>删除</a>

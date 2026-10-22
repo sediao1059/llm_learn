@@ -9,6 +9,7 @@ import PathsTab from './PathsTab';
 import JobsTab from './JobsTab';
 import VersionsTab from './VersionsTab';
 import AnalyticsTab from './AnalyticsTab';
+import NotesTab from './NotesTab';
 
 export default function AdminPage() {
   return (
@@ -27,6 +28,7 @@ export default function AdminPage() {
             { key: 'jobs', label: '定时任务', children: <JobsTab /> },
             { key: 'versions', label: '版本管理', children: <VersionsTab /> },
             { key: 'analytics', label: '📊 报表统计', children: <AnalyticsTab /> },
+            { key: 'notes', label: '笔记管理', children: <NotesTab /> },
           ]}
         />
       </Card>
