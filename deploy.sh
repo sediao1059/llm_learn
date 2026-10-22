@@ -50,9 +50,15 @@ docker network connect "$NETWORK" mysql 2>/dev/null || true
 BUILD="docker run --rm --network $NETWORK --env-file .env -v $REMOTE_DIR/backend:/app -w /app -e NPM_CONFIG_REGISTRY=$NPM_REGISTRY -e PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma $IMAGE"
 $BUILD bash -c 'npm install --no-audit --no-fund && npx prisma generate && npx prisma db push --skip-generate && npx nest build'
 docker rm -f "$CONTAINER" 2>/dev/null || true
-docker run -d --name "$CONTAINER" --restart unless-stopped --network "$NETWORK" -p 127.0.0.1:$BACKEND_PORT:$BACKEND_PORT --env-file .env -v "$REMOTE_DIR/backend:/app" -w /app "$IMAGE" node dist/src/main.js
-sleep 2
+docker run -d --name "$CONTAINER" --restart unless-stopped --network "$NETWORK" -p 127.0.0.1:$BACKEND_PORT:$BACKEND_PORT --env-file .env -v "$REMOTE_DIR/backend:/app" -w /app "$IMAGE" node dist/main.js
+ok=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$BACKEND_PORT/api || true)"
+  [ -n "$code" ] && [ "$code" != "000" ] && { ok=1; break; }
+  sleep 1
+done
 docker logs --tail 5 "$CONTAINER"
+[ -n "$ok" ] || { echo "✖ 后端容器未响应 http://127.0.0.1:$BACKEND_PORT/api，完整日志：docker logs $CONTAINER"; exit 1; }
 EOF
 }
 
