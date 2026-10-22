@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * 上传知识挂图谱：一次上传被 AI 拆解成多条知识时，
- * 审核通过后每条知识各自成为图谱节点（`up-{上传id}-{序号}` 前缀），
+ * 审核通过后每条知识各自成为图谱节点（`up-{上传id}-{序号}` 前缀，分类「📤 上传」），
  * 全部连向所属「📚 专栏」节点（聚合节点），同一次上传的多条之间两两互连（同源天然相关），
  * 原有指向已有知识点的 links 保留——图谱上呈现「一个聚合节点关联一组知识」的形态。
  *
@@ -21,6 +21,11 @@ export class UploadGraphService {
 
   /** 幂等挂载：targetUploadId 省略时全量扫描。返回 { uploads, created } */
   async syncUploadsToGraph(targetUploadId?: number): Promise<{ uploads: number; created: number }> {
+    // 存量纠正：改版前成员节点与专栏同为「📚 专栏」分类，图谱上分不清谁是聚合节点，统一改为「📤 上传」
+    await this.prisma.aiNode.updateMany({
+      where: { id: { startsWith: 'up-' }, category: '📚 专栏' },
+      data: { category: '📤 上传' },
+    });
     const items = await this.prisma.collectionItem.findMany({
       where: targetUploadId ? { sourceUploadId: targetUploadId } : { sourceUploadId: { not: null } },
       orderBy: [{ id: 'asc' }],
@@ -54,7 +59,7 @@ export class UploadGraphService {
         await this.prisma.aiNode.create({
           data: {
             id: nodeId, title: it.title.slice(0, 160),
-            category: '📚 专栏', layer: '未分层',
+            category: '📤 上传', layer: '未分层',
             tags: JSON.stringify(this.parseArr(it.tags).slice(0, 6)),
             content: it.content, links: JSON.stringify(links),
             createdBy: it.createdBy, profileTags: it.profileTags,

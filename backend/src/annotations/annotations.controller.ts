@@ -41,12 +41,13 @@ export class AnnotationsController {
     };
   }
 
-  /** SSE 流式对话（支持多轮追问） */
+  /** SSE 流式对话（支持多轮追问；无选区 = 面向整篇知识点的 AI 追问，带笔记正文上下文） */
   @Post('stream')
   async stream(@Body() body: any, @CurrentUser() user: CurrentUserType, @Res() res: any) {
     const anchorText = String(body.anchorText || '').trim().slice(0, 1000);
     const question = String(body.question || '').trim().slice(0, 500);
     const nodeTitle = String(body.nodeTitle || '').trim().slice(0, 200);
+    const nodeContent = String(body.nodeContent || '').trim().slice(0, 4000);
     const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
     if (!question) throw new BadRequestException('请输入问题');
     const model = await this.prisma.llmModel.findFirst({ where: { isGlobal: 1, status: 'enabled' } });
@@ -55,13 +56,24 @@ export class AnnotationsController {
     const { LlmService } = await import('../llm/llm.service');
     const llm = new LlmService(this.prisma);
 
-    const system = `你是「LLM 学习知识图谱」的划词解读助手。用户在阅读一篇大模型技术笔记时选中了一段文字，你要产出一段「注解」供其他读者阅读。
+    // 有选区 = 针对选中文字出注解；无选区 = 面向整篇知识点答疑（回答将存为整篇注解共享）
+    const system = anchorText
+      ? `你是「LLM 学习知识图谱」的划词解读助手。用户在阅读一篇大模型技术笔记时选中了一段文字，你要产出一段「注解」供其他读者阅读。
 - 直接针对选中的原文解释：第一句就用大白话说清它是什么（能打比方就打比方），再展开关键细节
 - 术语第一次出现紧跟括号翻译成大白话；不堆术语、不写空话；紧凑 markdown；控制在 300 字以内
+- 如果用户追问，基于之前的对话继续回答，可以展开更多细节`
+      : `你是「LLM 学习知识图谱」的笔记答疑助手。用户正在阅读一篇大模型技术笔记，针对整篇内容向你提问，你的回答可能被存为「整篇注解」供所有读者共享。
+- 第一句直接回应问题（能打比方就打比方），再展开关键细节；回答要基于这篇笔记的内容
+- 术语第一次出现紧跟括号翻译成大白话；不堆术语、不写空话；紧凑 markdown；控制在 500 字以内
 - 如果用户追问，基于之前的对话继续回答，可以展开更多细节`;
 
+    const contextMsg = anchorText
+      ? `【所在知识点】${nodeTitle}\n【选中的原文】\n${anchorText}`
+      : (nodeTitle || nodeContent)
+        ? `【所在知识点】${nodeTitle}\n【笔记正文摘录】\n${nodeContent || '（未提供正文）'}`
+        : '';
     const msgs = [
-      ...(anchorText ? [{ role: 'user', content: `【所在知识点】${nodeTitle}\n【选中的原文】\n${anchorText}` }] : []),
+      ...(contextMsg ? [{ role: 'user', content: contextMsg }] : []),
       ...history,
       { role: 'user', content: question },
     ];
@@ -140,8 +152,32 @@ export class AnnotationsController {
   async generateInterview(@Body() body: any, @CurrentUser() user: CurrentUserType, @Res() res: any) {
     const nodeId = String(body.nodeId || '').trim();
     if (!nodeId) throw new BadRequestException('缺少 nodeId');
+    // 出题素材：notes 表的手工笔记为主；AI 沉淀/上传成员/专栏聚合节点在 ai_nodes 表——
+    // 专栏（col-）没有自己的正文，用收录的文章合集出题；一篇都没收录时给友好提示
+    let genTitle = '';
+    let genContent = '';
     const note = await this.prisma.note.findUnique({ where: { id: nodeId } });
-    if (!note) throw new NotFoundException('笔记不存在');
+    if (note) {
+      genTitle = note.title;
+      genContent = note.content || '';
+    } else {
+      const ai = await this.prisma.aiNode.findUnique({ where: { id: nodeId } });
+      if (!ai) throw new NotFoundException('笔记不存在');
+      genTitle = ai.title;
+      if (nodeId.startsWith('col-')) {
+        const members = await this.prisma.collectionItem.findMany({
+          where: { collectionNodeId: nodeId }, orderBy: { id: 'asc' }, take: 20,
+        });
+        if (!members.length) {
+          throw new BadRequestException('该专栏下还没有关联的文章，等文章入库后再来生成面试题');
+        }
+        genContent = members.map((m, i) =>
+          `### 第 ${i + 1} 篇 · ${m.title}\n${String(m.content || '').slice(0, 4000)}`
+        ).join('\n\n');
+      } else {
+        genContent = ai.content || '';
+      }
+    }
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -177,8 +213,8 @@ export class AnnotationsController {
       return;
     }
 
-    const system = `你是资深大模型技术面试官。基于笔记内容出一套「高频面试题」：4~6 道题，每题先提问再给 2~4 句参考答案（只用笔记里的知识）。参考答案要直白：第一句直接给出答案要点，再补关键细节；术语第一次出现用括号说清大白话意思；不写空话套话。markdown 编号列表输出。`;
-    const userPrompt = `【笔记标题】${note.title}\n\n【笔记正文】\n${note.content}`;
+    const system = `你是资深大模型技术面试官。基于给定材料（一篇笔记，或一个专栏收录的多篇文章）出一套「高频面试题」：4~6 道题，每题先提问再给 2~4 句参考答案（只用材料里的知识）。参考答案要直白：第一句直接给出答案要点，再补关键细节；术语第一次出现用括号说清大白话意思；不写空话套话。markdown 编号列表输出。`;
+    const userPrompt = `【标题】${genTitle}\n\n【材料正文】\n${genContent}`;
 
     // 进行中合并：别的用户正在生成同一篇时不再重复排队/调模型，实时共享同一次流式输出
     const flightKey = `interview:${nodeId}`;
@@ -327,7 +363,18 @@ export class AnnotationsController {
     });
     const visible = rows.filter(r => r.status === 'approved' || r.createdBy === user.username);
     const names = await this.displayNameMap(visible.map(r => r.createdBy));
-    return { annotations: visible.map(r => this.pub(r, names)) };
+    // 讨论数（分组一次查出，避免 N+1）：知识浮窗「全部注解」列表展示每条的讨论条数
+    const counts = visible.length
+      ? await this.prisma.annotationReply.groupBy({
+          by: ['annotationId'],
+          where: { annotationId: { in: visible.map(r => r.id) } },
+          _count: { _all: true },
+        })
+      : [];
+    const replyCount = new Map(counts.map(c => [c.annotationId, c._count._all]));
+    return {
+      annotations: visible.map(r => ({ ...this.pub(r, names), replyCount: replyCount.get(r.id) || 0 })),
+    };
   }
 
   @Delete(':id')

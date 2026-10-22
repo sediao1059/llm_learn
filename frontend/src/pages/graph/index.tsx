@@ -104,7 +104,7 @@ export default function GraphPage() {
       nodes.push(...aiData.nodes);
       edges.push(...(aiData.edges || []).filter((e: any) =>
         knownIds.has(e.source) || aiData.nodes.some((n: any) => n.id === e.source)));
-      // AI 节点分类（如「📚 专栏」）在静态基础上合并（SPEC §4.4），图例与着色统一
+      // AI 节点分类（「📚 专栏」聚合节点、「📤 上传」成员节点等）在静态基础上合并（SPEC §4.4），图例与着色统一
       categories = [...new Set([
         ...data.categories,
         ...aiData.nodes.map((n: any) => n.category).filter(Boolean),
@@ -166,11 +166,14 @@ export default function GraphPage() {
       if (selDiffs.length && !selDiffs.includes(n.difficulty || '未标注')) return false;
       return true;
     };
-    const nodes = merged.nodes.filter(n => (!focusIds || focusIds.has(n.id)) && match(n));
-    const ids = new Set(nodes.map(n => n.id));
+    // 有筛选条件（关键词/标签/难度）时全图命中，不受起点聚焦层数截断——
+    // 与已有知识点零关联的新专栏（孤岛）在聚焦视图里 BFS 走不到，截断的话永远搜不出来
+    const gate = activeFilterCount > 0 ? null : focusIds;
+    const nodes = merged.nodes.filter(n => (!gate || gate.has(n.id)) && match(n));
+    const ids = new Set(nodes.map((n: any) => n.id));
     const edges = merged.edges.filter((e: any) => ids.has(e.source) && ids.has(e.target));
     return { nodes, edges, total: merged.nodes.length };
-  }, [merged, focusIds, searchText, selTags, selDiffs]);
+  }, [merged, focusIds, searchText, selTags, selDiffs, activeFilterCount]);
 
   const clearFilters = () => {
     setSearchInput('');

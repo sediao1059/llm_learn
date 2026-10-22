@@ -6,6 +6,7 @@ import {
 import {
   LeftOutlined, RightOutlined, PlusOutlined, LoadingOutlined,
   ExpandAltOutlined, CompressOutlined, StarOutlined, StarFilled,
+  RobotOutlined, MessageOutlined,
 } from '@ant-design/icons';
 import MarkdownContent from './MarkdownContent';
 import AnnotationModal from '../pages/graph/AnnotationModal';
@@ -13,6 +14,7 @@ import InterviewGenModal from './InterviewGenModal';
 import AnnotationFloatButton from './AnnotationFloatButton';
 import AnnotationReadModal from './AnnotationReadModal';
 import AnnotationEntries from './AnnotationEntries';
+import AnnotationListModal from './AnnotationListModal';
 import useSelectionAnno from '../hooks/useSelectionAnno';
 import { applyAnnoMarks, findAnnoByClickTarget } from '../utils/annotate';
 
@@ -65,6 +67,10 @@ export default function KnowledgeDrawer({
   const { anchorText, selectionPos, setSelectionPos, handleMouseUp } = useSelectionAnno(contentRef);
   const [annoOpen, setAnnoOpen] = useState(false);
   const [annoKey, setAnnoKey] = useState(0);
+  // true = 标题栏 🤖 图标打开的「面向整篇知识点追问」（无选区，解答存为整篇注解）
+  const [docMode, setDocMode] = useState(false);
+  // 全部注解列表弹窗
+  const [listOpen, setListOpen] = useState(false);
 
   // 放大阅读
   const [readerOpen, setReaderOpen] = useState(false);
@@ -135,6 +141,19 @@ export default function KnowledgeDrawer({
       message.info('请先登录后使用划词解答');
       return;
     }
+    setDocMode(false);
+    setAnnoOpen(true);
+    setSelectionPos(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  // 标题栏 🤖 入口：直接面向这个知识点向 AI 追问（无选区 → 整篇注解，AI 回答带笔记正文上下文）
+  const askAI = () => {
+    if (!isLoggedIn) {
+      message.info('请先登录后向 AI 追问');
+      return;
+    }
+    setDocMode(true);
     setAnnoOpen(true);
     setSelectionPos(null);
     window.getSelection()?.removeAllRanges();
@@ -227,6 +246,10 @@ export default function KnowledgeDrawer({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>{nodeData?.title || nodeId}</span>
+            <Tooltip title="🤖 向 AI 追问：直接针对这篇笔记提问（可多轮，解答可存为整篇注解，在讨论区继续追问/评论）">
+              <Button type="text" size="small" icon={<RobotOutlined />}
+                onClick={askAI} />
+            </Tooltip>
             {isLoggedIn && (
               <Tooltip title={fav ? '取消收藏（顶栏 ⭐ 收藏可随时找回）' : '收藏这篇笔记（仅自己可见）'}>
                 <Button type="text" size="small"
@@ -317,12 +340,21 @@ export default function KnowledgeDrawer({
               <AnnotationEntries annotations={annotations} content={displayContent} onRead={setReadingAnno} />
             )}
 
-            {/* 底部操作栏（sticky） */}
+            {/* 底部操作栏（sticky）：左「全部注解」入口，学习程度右对齐 */}
             <div style={{
               position: 'sticky', bottom: 0, background: '#fff',
               borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 16,
-              display: 'flex', alignItems: 'center', gap: 8, zIndex: 10,
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', zIndex: 10,
             }}>
+              {/* 全部注解：本篇划词注解 + 整篇追问 + 面试题汇总，点开可进讨论区继续追问/评论 */}
+              {isLoggedIn && (
+                <Tooltip title="查看这篇的全部注解（划词/整篇/面试题），点击任意一条可进入阅读与讨论区">
+                  <Button size="small" icon={<MessageOutlined />} onClick={() => setListOpen(true)}>
+                    全部注解{annotations.length ? `（${annotations.length}）` : ''}
+                  </Button>
+                </Tooltip>
+              )}
+
               {/* 路线导航（可选） */}
               {onNavigate && (
                 <>
@@ -337,7 +369,7 @@ export default function KnowledgeDrawer({
                 </>
               )}
 
-              {/* 学习程度：明确的文字按钮，点开选掌握程度 */}
+              {/* 学习程度：明确的文字按钮，点开选掌握程度（始终右对齐） */}
               {onLevelChange && (
                 <Popover
                   content={levelPopover}
@@ -345,7 +377,7 @@ export default function KnowledgeDrawer({
                   title={<span>标注这篇的学习程度<small style={{ color: '#999', fontWeight: 400 }}>（图谱「按掌握度着色」会用它）</small></span>}>
                   <Button size="small"
                     icon={<span style={{ color: current.color }}>{current.icon}</span>}
-                    style={{ marginLeft: onNavigate ? 'auto' : 0 }}>
+                    style={{ marginLeft: 'auto' }}>
                     学习程度：{current.name} ▾
                   </Button>
                 </Popover>
@@ -371,7 +403,7 @@ export default function KnowledgeDrawer({
       {/* 浮动"解答"按钮 — 紧贴选区上方 4px */}
       <AnnotationFloatButton pos={selectionPos} onClick={openAnnotation} />
 
-      {/* 划词注解弹窗 */}
+      {/* 注解弹窗：划词解答 / 🤖 整篇追问（docMode 时无选区，AI 带笔记正文上下文） */}
       {isLoggedIn && nodeId && (
         <AnnotationModal
           key={annoKey}
@@ -379,8 +411,13 @@ export default function KnowledgeDrawer({
           onClose={() => setAnnoOpen(false)}
           nodeId={nodeId}
           nodeTitle={nodeData?.title || ''}
-          anchorText={anchorText}
+          anchorText={docMode ? '' : anchorText}
+          nodeContent={String(nodeData?.content || '').slice(0, 4000)}
           onSaved={() => { onAnnotationSaved?.(); setAnnoKey(k => k + 1); }}
+          onSavedAnno={(anno) => {
+            // 整篇追问存为注解后直接转「注解阅读」（含讨论区，可继续追问/评论）
+            if (anno && !anno.anchorText) setReadingAnno(anno);
+          }}
           userRole={userRole || 'user'}
         />
       )}
@@ -478,6 +515,15 @@ export default function KnowledgeDrawer({
           setIvForce(true);
           setIvGenOpen(true);
         }}
+      />
+
+      {/* 全部注解列表弹窗：点任意条目进入注解阅读 + 讨论区 */}
+      <AnnotationListModal
+        open={listOpen}
+        onClose={() => setListOpen(false)}
+        nodeTitle={nodeData?.title || ''}
+        annotations={annotations}
+        onRead={(a) => { setListOpen(false); setReadingAnno(a); }}
       />
     </>
   );

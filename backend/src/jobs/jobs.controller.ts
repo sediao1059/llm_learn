@@ -20,7 +20,7 @@ export class JobsController {
   private jobDefs = [
     { id: 'tiers', name: '图谱分层选举', schedule: '手动', desc: '按度数选分类 hub + BFS 挂靠' },
     { id: 'hot', name: '热门推荐统计', schedule: '手动', desc: '统计近 30 天足迹（>10 票上榜）' },
-    { id: 'upload-graph', name: '上传知识挂图谱', schedule: '每日 03:25（自动）+ 手动', desc: '审核通过的多条拆解知识建节点连向专栏聚合节点、彼此互连（幂等，重复执行不产生重复节点）' },
+    { id: 'upload-graph', name: '上传知识挂图谱', schedule: '每日 03:25（自动）+ 手动', desc: '审核通过的多条拆解知识建节点（分类「📤 上传」）连向「📚 专栏」聚合节点、彼此互连（幂等，重复执行不产生重复节点）' },
   ];
 
   @Get()

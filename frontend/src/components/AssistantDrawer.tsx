@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Drawer, Button, Select, Input, Tag, Tooltip, Modal, Rate, Spin, message, Popconfirm,
+  Drawer, Button, Select, Input, Tag, Modal, Rate, Spin, message, Popconfirm,
 } from 'antd';
 import {
   PlusOutlined, SendOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, RobotOutlined,
@@ -213,7 +213,23 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
       start: () => hideQueueNotice(),
       delta: d => patch(m => ({ ...m, content: m.content + d.text })),
       thinking: d => patch(m => ({ ...m, thinking: (m.thinking || '') + d.text })),
-      result: d => patch(m => ({ ...m, id: d.messageId })),
+      result: d => {
+        patch(m => ({ ...m, id: d.messageId }));
+        // 回填本轮提问的 id：沉淀按钮需要配对的 userMessageId，不回填则当轮刚答完的回答不显示按钮
+        if (d.userMessageId) {
+          setMessages(prev => {
+            if (streamingChat.current !== chatId) return prev;
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].role !== 'user') continue;
+              if (prev[i].id !== null) return prev;
+              const next = [...prev];
+              next[i] = { ...prev[i], id: d.userMessageId };
+              return next;
+            }
+            return prev;
+          });
+        }
+      },
       error: d => patch(m => ({ ...m, error: d.error })),
     }).then(() => {
       setStreaming(false);
@@ -246,9 +262,9 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
       const d = await trackLlmCall(jsonFetch('/ai/knowledge/preview', 'POST', {
         chatId: currentChatId, questionId: qid, answerId: aid,
       }));
-      setPreview(d);
+      setPreview({ ...d, qid, aid });
       setPreviewTitle(d.decision?.title || '');
-    } catch (e: any) { message.error(e.message || 'AI 整合判断失败'); }
+    } catch (e: any) { message.error(e.message || '标题提取失败'); }
     finally { setPreviewLoading(false); }
   };
 
@@ -257,10 +273,10 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
     setApplying(true);
     try {
       const decision = { ...preview.decision, title: previewTitle.trim() || preview.decision.title };
-      const d = await jsonFetch('/ai/knowledge/apply', 'POST', { chatId: currentChatId, decision });
-      message.success(d.action === 'create'
-        ? `✨ 已新建知识点「${d.title}」并加入图谱`
-        : '♻️ 已合并进已有知识点');
+      const d = await jsonFetch('/ai/knowledge/apply', 'POST', {
+        chatId: currentChatId, questionId: preview.qid, answerId: preview.aid, decision,
+      });
+      message.success(`✨ 已沉淀为知识点「${d.title}」并加入图谱`);
       setPreview(null);
       window.dispatchEvent(new CustomEvent('kg:ai-knowledge-updated'));
     } catch (e: any) { message.error(e.message || '写入失败'); }
@@ -334,7 +350,7 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
             <Button
               size="small" style={{ marginTop: 6 }} disabled={previewLoading}
               onClick={() => startDeposit(qid as number, m.id as number)}
-            >{previewLoading ? '⏳ AI 正在与已有知识点对比…' : '✨ 沉淀为知识点'}</Button>
+            >{previewLoading ? '⏳ AI 正在提取标题…' : '✨ 沉淀为知识点'}</Button>
           )}
         </div>
       );
@@ -456,7 +472,7 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
           maxLength={60} onPressEnter={doRename} placeholder="会话标题" />
       </Modal>
 
-      {/* 管理员：沉淀预览 → 确认写入 */}
+      {/* 管理员：沉淀预览（AI 只提取标题/分类/标签，正文 = 回答原文）→ 确认写入 */}
       <Modal
         open={!!preview} title="✨ 沉淀为知识点（确认后写入图谱）"
         onCancel={() => setPreview(null)}
@@ -464,51 +480,31 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
         footer={[
           <Button key="cancel" onClick={() => setPreview(null)}>取消</Button>,
           <Button key="ok" type="primary" loading={applying} onClick={applyDeposit}>
-            {d?.action === 'create' ? '✅ 确认新建' : '✅ 确认合并'}
+            ✅ 确认沉淀
           </Button>,
         ]}
       >
         {d && (
           <div>
             <div style={{ marginBottom: 8 }}>
-              <Tag color={d.action === 'create' ? 'green' : 'blue'}>
-                {d.action === 'create' ? '🆕 将新建知识点' : '♻️ 将合并进已有知识点'}
-              </Tag>
-              {d.reason && <span style={{ color: '#888', fontSize: 12 }}>判断理由：{d.reason}</span>}
+              <span style={{ fontSize: 13, marginRight: 8 }}>标题（可修改）：</span>
+              <Input value={previewTitle} onChange={e => setPreviewTitle(e.target.value)}
+                style={{ width: 360 }} maxLength={80} />
             </div>
-            {d.action === 'create' ? (
-              <>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, marginRight: 8 }}>标题（可修改）：</span>
-                  <Input value={previewTitle} onChange={e => setPreviewTitle(e.target.value)}
-                    style={{ width: 360 }} maxLength={80} />
-                </div>
-                <div style={{ marginBottom: 12, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {d.category && <Tag color="geekblue">{d.category}</Tag>}
-                  {(d.layer || '未分层') && <Tag color="blue">{d.layer || '未分层'}</Tag>}
-                  {(d.tags || []).map((t: string) => <Tag key={t}>{t}</Tag>)}
-                </div>
-              </>
-            ) : (
-              <p style={{ marginBottom: 12 }}>
-                合并目标：<b>{preview?.targetTitle || d.targetId}</b>
-                <span style={{ color: '#999', fontSize: 12 }}>（补充内容只会追加该知识点还没有的新信息）</span>
-              </p>
-            )}
-            {preview?.linkTitles?.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                将建立关联：
-                {preview.linkTitles.map((l: any) => (
-                  <Tooltip key={l.id} title={l.id}><Tag color="success">{l.title}</Tag></Tooltip>
-                ))}
-              </div>
-            )}
+            <div style={{ marginBottom: 12, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {d.category && <Tag color="geekblue">{d.category}</Tag>}
+              <Tag color="blue">未分层</Tag>
+              {(d.tags || []).map((t: string) => <Tag key={t}>{t}</Tag>)}
+            </div>
             <div style={{
               border: '1px solid #f0f0f0', borderRadius: 8,
               maxHeight: '46vh', overflowY: 'auto', padding: '8px 12px', background: '#fafbfc',
             }}>
-              <MarkdownContent content={d.content || ''} />
+              <MarkdownContent content={preview?.content || ''} />
             </div>
+            <p style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
+              正文为回答原文（不改写、不总结），分类与标签由 AI 顺带给出。
+            </p>
           </div>
         )}
       </Modal>

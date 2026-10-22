@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input, Table, Tag, Tooltip, Spin } from 'antd';
+import { Input, Table, Tag, Tooltip, Spin, Select, message } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { useKnowledgeBase } from '../../hooks/useKnowledgeBase';
+import { useKnowledgeBase, invalidateKnowledgeBundle } from '../../hooks/useKnowledgeBase';
 import NodeReadDrawer from '../../components/NodeReadDrawer';
 
-/** 知识库：表格形式查全部知识，按关键词搜标题 / 摘要 / 分类 / 标签，点击行打开笔记浮窗 */
+const DIFFICULTY_OPTIONS = [
+  { value: '入门', label: '入门' },
+  { value: '进阶', label: '进阶' },
+  { value: '深入', label: '深入' },
+];
+
+/** 知识库：表格形式查全部知识，按关键词搜标题 / 摘要 / 分类 / 标签，点击行打开笔记浮窗；管理员可在难度列直接下拉改（含未标注的） */
 export default function LibraryPage() {
-  const { data, aiData } = useKnowledgeBase();
+  const { data, aiData, user } = useKnowledgeBase();
+  const isAdmin = user?.role === 'admin';
   // 关键词持久化：刷新后保持上次的查询，点输入框的 × 清除即重置
   const [keyword, setKeyword] = useState(() => localStorage.getItem('library.keyword') || '');
   const [kw, setKw] = useState(() => localStorage.getItem('library.keyword') || ''); // 防抖后再过滤
@@ -24,7 +31,10 @@ export default function LibraryPage() {
   }, [keyword]);
 
   const rows = useMemo(() => {
-    const all = [...(data?.nodes || []), ...(aiData?.nodes || [])];
+    // _static 标记来源：静态笔记有难度字段（可改），AI 沉淀/专栏节点没有（只展示）
+    const statics = (data?.nodes || []).map((n: any) => ({ ...n, _static: true }));
+    const ais = (aiData?.nodes || []).map((n: any) => ({ ...n, _static: false }));
+    const all = [...statics, ...ais];
     const k = kw.trim().toLowerCase();
     if (!k) return all;
     return all.filter(n =>
@@ -34,6 +44,26 @@ export default function LibraryPage() {
       String(n.layer || '').toLowerCase().includes(k) ||
       (n.tags || []).some((t: string) => t.toLowerCase().includes(k)));
   }, [data, aiData, kw]);
+
+  /** 管理员内联改难度：清空 = 未标注；成功后刷 bundle，图谱/浮窗同步生效 */
+  const changeDifficulty = async (n: any, v?: string) => {
+    try {
+      const r = await fetch(`/api/admin/notes/${encodeURIComponent(n.id)}/difficulty`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
+        },
+        body: JSON.stringify({ difficulty: v || '' }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.message || `HTTP ${r.status}`);
+      message.success(`《${n.title}》难度已改为「${v || '未标注'}」`);
+      invalidateKnowledgeBundle();
+    } catch (e: any) {
+      message.error(e.message || '难度更新失败');
+    }
+  };
 
   const columns: ColumnsType<any> = [
     {
@@ -49,8 +79,23 @@ export default function LibraryPage() {
       render: (v: string) => v ? <Tag color="geekblue">{v}</Tag> : '-' },
     { title: '层次', dataIndex: 'layer', key: 'layer', width: 130,
       render: (v: string) => v && v !== '未分层' ? <Tag color="blue">{v}</Tag> : '未分层' },
-    { title: '难度', dataIndex: 'difficulty', key: 'difficulty', width: 90,
-      render: (v: string) => v && v !== '未标注' ? <Tag color="orange">{v}</Tag> : '未标注' },
+    { title: '难度', dataIndex: 'difficulty', key: 'difficulty', width: isAdmin ? 112 : 90,
+      render: (_, n) => isAdmin && n._static ? (
+        <span onClick={(e) => e.stopPropagation()}>
+          <Tooltip title="点击下拉修改难度，清空 = 未标注">
+            <Select
+              size="small" variant="borderless" allowClear
+              value={DIFFICULTY_OPTIONS.some(o => o.value === n.difficulty) ? n.difficulty : undefined}
+              options={DIFFICULTY_OPTIONS}
+              placeholder="未标注"
+              onChange={(v) => changeDifficulty(n, v)}
+              style={{ width: 86, marginLeft: -8 }}
+            />
+          </Tooltip>
+        </span>
+      ) : (
+        n.difficulty && n.difficulty !== '未标注' ? <Tag color="orange">{n.difficulty}</Tag> : '未标注'
+      ) },
     {
       title: '标签', dataIndex: 'tags', key: 'tags',
       render: (tags: string[]) => !tags?.length ? '-' : (

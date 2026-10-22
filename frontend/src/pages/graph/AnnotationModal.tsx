@@ -16,6 +16,10 @@ interface Props {
   anchorText: string;
   onSaved: () => void;
   userRole: string;
+  /** 笔记正文（截断后传入）：整篇追问（无选区）时作为 AI 上下文 */
+  nodeContent?: string;
+  /** 保存成功后把注解对象回传父级（父级可借此直接转「注解阅读」弹窗继续讨论） */
+  onSavedAnno?: (anno: any) => void;
 }
 
 /** 自动检测注解类型：<10 字=词，≥10 字=句，无选中文本=整篇 */
@@ -25,7 +29,7 @@ function detectType(text: string): string {
 }
 
 export default function AnnotationModal({
-  open, onClose, nodeId, nodeTitle, anchorText, onSaved, userRole,
+  open, onClose, nodeId, nodeTitle, anchorText, onSaved, userRole, nodeContent, onSavedAnno,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -62,7 +66,7 @@ export default function AnnotationModal({
       const resp = await fetch('/api/ai/annotations/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ anchorText, question, nodeTitle, history }),
+        body: JSON.stringify({ anchorText, question, nodeTitle, nodeContent: nodeContent || '', history }),
       });
       if (!resp.ok || !resp.body) {
         const d = await resp.json().catch(() => ({}));
@@ -157,8 +161,10 @@ export default function AnnotationModal({
       }),
     });
     if (r.ok) {
+      const d = await r.json().catch(() => ({}));
       message.success('注解已保存');
       onSaved();
+      onSavedAnno?.(d.annotation);
       onClose();
     } else {
       const d = await r.json();
@@ -171,7 +177,7 @@ export default function AnnotationModal({
   return (
     <Modal
       open={open} onCancel={onClose}
-      title={`💡 划词解答 · ${typeLabel}注`} width={520}
+      title={anchorText ? `💡 划词解答 · ${typeLabel}注` : '✨ 向 AI 追问 · 整篇注解'} width={520}
       footer={null} destroyOnClose
       maskClosable={!(streaming || distilling)} keyboard={!(streaming || distilling)}
     >
@@ -214,7 +220,7 @@ export default function AnnotationModal({
             {messages.length === 0 && (
               <div style={{ textAlign: 'center', paddingTop: 80, color: '#8c8c8c', fontSize: 13 }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>💡</div>
-                <p>输入问题，AI 会针对选中的文字进行解答</p>
+                <p>{anchorText ? '输入问题，AI 会针对选中的文字进行解答' : '输入问题，AI 会结合这篇笔记的内容解答'}</p>
                 <p style={{ fontSize: 11 }}>可以多次追问 · 满意后点「存为注解」提炼入库</p>
               </div>
             )}

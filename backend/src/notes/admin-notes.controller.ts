@@ -1,5 +1,6 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards,
+  BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -47,6 +48,23 @@ export class AdminNotesController {
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: any) {
     return this.notesService.update(id, body);
+  }
+
+  /** 知识库页难度列的内联修改：只动 difficulty 一个字段（留空 = 未标注），不动 updatedAt（最近更新列表不抖动） */
+  @Patch(':id/difficulty')
+  async updateDifficulty(@Param('id') id: string, @Body() body: any) {
+    const v = String(body?.difficulty ?? '').trim();
+    if (!['', '入门', '进阶', '深入'].includes(v)) {
+      throw new BadRequestException('难度只能是 入门/进阶/深入，留空为「未标注」');
+    }
+    if (!await this.prisma.note.findUnique({ where: { id } })) {
+      throw new NotFoundException('笔记不存在');
+    }
+    await this.prisma.note.update({
+      where: { id },
+      data: { difficulty: v || '未标注', syncedAt: new Date() },
+    });
+    return { ok: true, difficulty: v || '未标注' };
   }
 
   @Delete(':id')

@@ -43,7 +43,7 @@ export default function MyUploadsPage() {
       <Alert
         type="info" showIcon style={{ marginBottom: 16 }}
         message="这里是你上传过的全部知识"
-        description="AI 拆解保存后，审核通过之前你就能点开阅读拆解出的每篇内容；审核通过后会进图谱的「📚 专栏」对全员可见，被驳回会给出理由。"
+        description="AI 拆解保存后，审核通过之前你就能点开阅读拆解出的每篇内容；审核通过后每篇作为「📤 上传」节点进图谱、挂在所属「📚 专栏」聚合节点下对全员可见，被驳回会给出理由。"
       />
 
       {uploads.length === 0 ? (

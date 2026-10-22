@@ -3,6 +3,7 @@ import {
   Table, Button, Tag, Drawer, Radio, Select, Space, Modal, Input, message, Card, Descriptions, Empty,
 } from 'antd';
 import { trackLlmCall } from '../../utils/llmQueueNotice';
+import MarkdownContent from '../../components/MarkdownContent';
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -47,6 +48,7 @@ export default function ReviewsTab() {
         ...prev,
         [sub.id]: {
           decision: d.decision,
+          content: d.content || '',
           tags: { level: sub.profileTags?.level || 'novice', focus: sub.profileTags?.focus || [] },
         },
       }));
@@ -178,20 +180,35 @@ export default function ReviewsTab() {
         {drafts[viewSub?.id] && (
           <>
             <Descriptions column={1} bordered style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="判断">
-                <Tag color={drafts[viewSub.id].decision.action === 'create' ? 'success' : 'warning'}>
-                  {drafts[viewSub.id].decision.action === 'create' ? '🆕 新建' : '♻️ 合并'}
-                </Tag>
-                {drafts[viewSub.id].decision.reason}
+              <Descriptions.Item label="标题（可修改）">
+                <Input
+                  value={drafts[viewSub.id].decision.title}
+                  maxLength={80}
+                  onChange={e => setDrafts(prev => ({
+                    ...prev,
+                    [viewSub.id]: {
+                      ...prev[viewSub.id],
+                      decision: { ...prev[viewSub.id].decision, title: e.target.value },
+                    },
+                  }))}
+                />
               </Descriptions.Item>
-              <Descriptions.Item label="标题">{drafts[viewSub.id].decision.title}</Descriptions.Item>
+              <Descriptions.Item label="分类 / 标签">
+                {drafts[viewSub.id].decision.category
+                  && <Tag color="geekblue">{drafts[viewSub.id].decision.category}</Tag>}
+                {(drafts[viewSub.id].decision.tags || []).map((t: string) => <Tag key={t}>{t}</Tag>)}
+                <Tag color="blue">未分层</Tag>
+              </Descriptions.Item>
             </Descriptions>
             <div style={{
               border: '1px solid #e8e8e8', borderRadius: 8, padding: 12, background: '#fafafa',
-              maxHeight: 350, overflowY: 'auto', fontSize: 13, lineHeight: 1.8,
+              maxHeight: 350, overflowY: 'auto',
             }}>
-              {drafts[viewSub.id].decision.content}
+              <MarkdownContent content={drafts[viewSub.id].content || ''} />
             </div>
+            <p style={{ color: '#8c8c8c', fontSize: 12, marginTop: 8 }}>
+              正文为提交的回答原文（不改写、不总结），通过后原样写入图谱。
+            </p>
             <div style={{ marginTop: 16 }}>
               <span style={{ color: '#8c8c8c', fontSize: 12 }}>沉淀画像（可修正）</span>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
