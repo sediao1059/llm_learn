@@ -35,9 +35,8 @@ export default function AppLayout() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   // 足迹/收藏点行：在当前页原地打开笔记浮窗（不跳转图谱页）
   const [readNodeId, setReadNodeId] = useState<string | null>(null);
-  const [version, setVersion] = useState('');
-  const [verDate, setVerDate] = useState('');
-  const [verChanges, setVerChanges] = useState<string[]>([]);
+  // 版本徽章：hover 展示最近几个版本的更新说明（只含用户可见条目，全部隐藏的版本后端已跳过）
+  const [verList, setVerList] = useState<{ version: string; date: string; changes: string[] }[]>([]);
   const pendingNav = useRef<string | null>(null);
 
   /** 未登录时点击需登录的功能：引导登录 */
@@ -63,13 +62,9 @@ export default function AppLayout() {
   }, [loading, user, loc.pathname]);
 
   useEffect(() => {
-    fetch('/api/versions/latest')
+    fetch('/api/versions')
       .then(r => r.json())
-      .then(d => {
-        setVersion(d.version || '');
-        setVerDate(d.date || '');
-        setVerChanges(d.changes || []);
-      })
+      .then(d => setVerList((d.versions || []).slice(0, 3)))
       .catch(() => {});
   }, []);
 
@@ -114,23 +109,27 @@ export default function AppLayout() {
             onClick={onNavClick} disabledOverflow
             style={{ borderBottom: 'none', background: 'transparent' }}
           />
-          {version && (
+          {verList.length > 0 && (
             <Tooltip
               placement="bottom"
               title={
                 <div style={{ maxWidth: 600 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                    🚀 本次更新 v{version}{verDate ? `（${verDate}）` : ''}
-                  </div>
-                  {verChanges.length ? (
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {verChanges.map((c, i) => (
-                        <li key={i} style={{ lineHeight: '22px' }}>{c}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span>暂无更新说明</span>
-                  )}
+                  {verList.map((v, i) => (
+                    <div key={i} style={i ? { marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.18)' } : undefined}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                        {i === 0 ? '🚀 ' : ''}v{v.version}{v.date ? `（${v.date}）` : ''}
+                      </div>
+                      {v.changes.length ? (
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {v.changes.map((c, j) => (
+                            <li key={j} style={{ lineHeight: '22px' }}>{c}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span>暂无更新说明</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               }
             >
@@ -141,7 +140,7 @@ export default function AppLayout() {
                   padding: '0 6px', borderRadius: 4, fontWeight: 600,
                 }}
               >
-                v{version}
+                v{verList[0].version}
               </Tag>
             </Tooltip>
           )}
