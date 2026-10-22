@@ -20,6 +20,8 @@ export class AdminUsersController {
     const rows = await this.prisma.user.findMany({
       orderBy: { id: 'asc' },
     });
+    // 超级管理员 = 第一个注册的用户（id 最小），有且仅有一个
+    const superId = rows.length ? rows[0].id : -1;
     // 汇总每个用户的 LLM 用量
     const usage = await this.prisma.llmUsage.groupBy({
       by: ['username'],
@@ -35,6 +37,7 @@ export class AdminUsersController {
         id: u.id, username: u.username, nickname: u.nickname || '',
         phone: u.phone || '', email: u.email || '',
         role: u.role, status: u.status, llmBanned: !!u.llmBanned,
+        isSuper: u.id === superId,
         createdAt: u.createdAt,
         inviteCode: invMap.get(u.inviteCodeId || 0) || '',
         profileTags: this.parseTags(u.profileTags),
@@ -58,6 +61,11 @@ export class AdminUsersController {
     if (!user) throw new NotFoundException('用户不存在');
     const role = body.role !== undefined ? (body.role === 'admin' ? 'admin' : 'user') : user.role;
     const status = body.status !== undefined ? (body.status === 'disabled' ? 'disabled' : 'enabled') : user.status;
+    // 超级管理员（第一个注册的用户）不可被撤销管理员、不可被禁用（含自己操作）
+    const first = await this.prisma.user.findFirst({ orderBy: { id: 'asc' }, select: { id: true } });
+    const isSuper = !!first && first.id === id;
+    if (isSuper && role !== 'admin') throw new BadRequestException('超级管理员（第一个注册的用户）不能撤销管理员权限');
+    if (isSuper && status === 'disabled') throw new BadRequestException('不能禁用超级管理员');
     if (id === me.id && (status === 'disabled' || role !== 'admin')) {
       throw new BadRequestException('不能禁用或撤销自己的管理员权限');
     }

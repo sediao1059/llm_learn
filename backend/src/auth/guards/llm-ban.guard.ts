@@ -4,8 +4,10 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 @Injectable()
 export class LlmBanGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const { user } = context.switchToHttp().getRequest();
-    if (user?.llmBanned) {
+    const req = context.switchToHttp().getRequest();
+    // 读取类接口（注解列表/高亮、共享会话记录等）不受禁AI影响，只拦生成/写入类
+    if (req.method === 'GET') return true;
+    if (req.user?.llmBanned) {
       throw new ForbiddenException('管理员已禁止您使用 AI 功能（浏览知识图谱不受影响），如有疑问请联系管理员');
     }
     return true;

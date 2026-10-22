@@ -35,12 +35,31 @@ export class CoreCrudController {
   }
 
   // ===== 收藏 =====
+  /** 节点标题映射：静态笔记 + AI 沉淀节点（足迹/收藏弹窗展示用） */
+  private async nodeTitleMap() {
+    const [notes, aiNodes] = await Promise.all([
+      this.prisma.note.findMany({ select: { id: true, title: true, category: true } }),
+      this.prisma.aiNode.findMany({ select: { id: true, title: true } }),
+    ]);
+    const map = new Map<string, { title: string; category: string }>();
+    notes.forEach(n => map.set(n.id, { title: n.title, category: n.category }));
+    aiNodes.forEach(n => map.set(n.id, { title: n.title, category: 'AI 沉淀' }));
+    return map;
+  }
+
   @Get('favorites')
   async getFavorites(@CurrentUser() user: CurrentUserType) {
     const rows = await this.prisma.favorite.findMany({
       where: { userId: user.id }, orderBy: { createdAt: 'desc' },
     });
-    return { favorites: rows.map(r => ({ nodeId: r.nodeId, createdAt: r.createdAt })) };
+    const titles = await this.nodeTitleMap();
+    return {
+      favorites: rows.map(r => ({
+        nodeId: r.nodeId, createdAt: r.createdAt,
+        title: titles.get(r.nodeId)?.title || r.nodeId,
+        category: titles.get(r.nodeId)?.category || '',
+      })),
+    };
   }
 
   @Put('favorites')
@@ -119,7 +138,14 @@ export class CoreCrudController {
       orderBy: [{ lastViewedAt: 'desc' }, { id: 'desc' }],
       take: 200,
     });
-    return { history: rows.map(r => ({ nodeId: r.nodeId, count: r.count, lastViewedAt: r.lastViewedAt })) };
+    const titles = await this.nodeTitleMap();
+    return {
+      history: rows.map(r => ({
+        nodeId: r.nodeId, count: r.count, lastViewedAt: r.lastViewedAt,
+        title: titles.get(r.nodeId)?.title || r.nodeId,
+        category: titles.get(r.nodeId)?.category || '',
+      })),
+    };
   }
 
   // ===== 大纲视图展开状态 =====

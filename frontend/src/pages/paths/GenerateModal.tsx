@@ -133,6 +133,7 @@ export default function GenerateModal({
     <Modal
       open={open} onCancel={() => { onClose(); setMessages([]); }}
       title="🤖 AI 定制学习路线" width={680} footer={null}
+      maskClosable={!generating} keyboard={!generating}
     >
       <div style={{ height: 420, overflowY: 'auto', marginBottom: 12, padding: '0 4px' }}>
         {messages.length === 0 && (

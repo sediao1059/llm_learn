@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Drawer, Tag, Card, Button, Popover, Tooltip, Modal, Input, message,
+  Drawer, Tag, Button, Popover, Tooltip, Modal, Input, message,
   Divider, Empty, FloatButton,
 } from 'antd';
 import {
   LeftOutlined, RightOutlined, PlusOutlined, LoadingOutlined,
-  ExpandAltOutlined, CompressOutlined,
+  ExpandAltOutlined, CompressOutlined, StarOutlined, StarFilled,
 } from '@ant-design/icons';
 import MarkdownContent from './MarkdownContent';
 import AnnotationModal from '../pages/graph/AnnotationModal';
+import InterviewGenModal from './InterviewGenModal';
+import AnnotationFloatButton from './AnnotationFloatButton';
+import AnnotationReadModal from './AnnotationReadModal';
+import AnnotationEntries from './AnnotationEntries';
+import useSelectionAnno from '../hooks/useSelectionAnno';
+import { applyAnnoMarks, findAnnoByClickTarget } from '../utils/annotate';
 
 const LEVELS = [
   { v: 0, name: '未学习', icon: '○', color: '#d9d9d9' },
@@ -41,6 +47,9 @@ export interface KnowledgeDrawerProps {
   annotations?: any[];
 }
 
+// 浏览足迹：同一节点连续打开只记一次（模块级记录上一个上报的节点）
+let lastReportedNode: string | null = null;
+
 export default function KnowledgeDrawer({
   open, onClose, nodeId, nodeData, level = 0, onLevelChange,
   prevId, nextId, onNavigate,
@@ -52,9 +61,8 @@ export default function KnowledgeDrawer({
   const contentRef = useRef<HTMLDivElement>(null);
   const current = LEVELS[level] || LEVELS[0];
 
-  // 划词注释
-  const [anchorText, setAnchorText] = useState('');
-  const [selectionPos, setSelectionPos] = useState<{x: number; y: number} | null>(null);
+  // 划词注解（选区检测 + 浮动按钮位置由共享 hook 提供）
+  const { anchorText, selectionPos, setSelectionPos, handleMouseUp } = useSelectionAnno(contentRef);
   const [annoOpen, setAnnoOpen] = useState(false);
   const [annoKey, setAnnoKey] = useState(0);
 
@@ -66,36 +74,60 @@ export default function KnowledgeDrawer({
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
+  // 收藏
+  const [fav, setFav] = useState(false);
+
+  // 注解阅读弹窗 + 放大阅读容器
+  const [readingAnno, setReadingAnno] = useState<any>(null);
+  const readerRef = useRef<HTMLDivElement>(null);
+  // 面试题懒加载生成弹窗
+  const [ivGenOpen, setIvGenOpen] = useState(false);
+
+  // 打开面板：查收藏状态 + 上报浏览足迹（仅登录；同一节点连续打开只记一次）
+  useEffect(() => {
+    if (!open || !nodeId || !isLoggedIn) return;
+    fetch('/api/favorites', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}` },
+    })
+      .then(r => r.json())
+      .then(d => setFav((d.favorites || []).some((f: any) => f.nodeId === nodeId)))
+      .catch(() => {});
+    if (lastReportedNode !== nodeId) {
+      lastReportedNode = nodeId;
+      fetch('/api/history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
+        },
+        body: JSON.stringify({ nodeId }),
+      }).catch(() => {});
+    }
+  }, [open, nodeId, isLoggedIn]);
+
+  const toggleFav = async () => {
+    const next = !fav;
+    setFav(next); // 乐观更新
+    try {
+      await fetch('/api/favorites', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
+        },
+        body: JSON.stringify({ nodeId, on: next }),
+      });
+    } catch {
+      setFav(!next);
+      message.error('操作失败，请重试');
+    }
+  };
+
   // 清空选区
   useEffect(() => {
-    setAnchorText('');
     setSelectionPos(null);
     setReaderOpen(false);
   }, [nodeId, open]);
-
-  // 划词检测 — 不要求登录也能选中
-  const handleMouseUp = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) { setSelectionPos(null); return; }
-    const text = sel.toString().trim();
-    if (!text || text.length < 2 || text.length > 1000) { setSelectionPos(null); return; }
-    const range = sel.getRangeAt(0);
-    const container = contentRef.current;
-    if (!container || !container.contains(range.commonAncestorContainer)) { setSelectionPos(null); return; }
-    const rect = range.getBoundingClientRect();
-    setAnchorText(text);
-    setSelectionPos({ x: rect.left + rect.width / 2, y: rect.top });
-  }, []);
-
-  // 全局 mousedown 关闭浮动按钮
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.anno-float-btn')) setSelectionPos(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   const openAnnotation = () => {
     if (!isLoggedIn) {
@@ -131,18 +163,36 @@ export default function KnowledgeDrawer({
     setNoteOpen(false);
   };
 
+  // 正文 / 放大阅读渲染后画划线。注意：MarkdownContent 的 components 是内联函数，
+  // 本组件任何状态变化（开关弹窗等）都会让 react-markdown 整体重建正文 DOM、划线被冲掉，
+  // 因此必须每次渲染后重画（无依赖数组），不能只在内容变化时画一次。
+  useEffect(() => {
+    if (!open) return;
+    applyAnnoMarks(contentRef.current, annotations);
+  });
+
+  useEffect(() => {
+    if (!readerOpen) return;
+    applyAnnoMarks(readerRef.current, annotations);
+  });
+
+  // 点击荧光高亮 → 打开注解阅读弹窗
+  const onContentClick = (e: React.MouseEvent) => {
+    const anno = findAnnoByClickTarget(e.target as HTMLElement, annotations);
+    if (anno) setReadingAnno(anno);
+  };
+
+  // 切换节点时正文滚回顶部
+  useEffect(() => {
+    contentRef.current?.closest('.ant-drawer-body')?.scrollTo({ top: 0 });
+  }, [nodeId]);
+
   const levelPopover = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {LEVELS.map(l => (
         <button key={l.v}
           onClick={() => onLevelChange?.(nodeId, l.v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
-            border: 'none', background: level === l.v ? '#f0f5ff' : 'transparent',
-            borderRadius: 4, cursor: 'pointer', fontSize: 13,
-            color: level === l.v ? '#1677ff' : '#333',
-            fontWeight: level === l.v ? 600 : 400,
-          }}>
+          className={`level-option${level === l.v ? ' active' : ''}`}>
           <span style={{ color: l.color, fontSize: 14, width: 16, textAlign: 'center' }}>{l.icon}</span>
           {l.name}
         </button>
@@ -164,6 +214,10 @@ export default function KnowledgeDrawer({
 
   const displayContent = stripOneliner(nodeData?.content, nodeData?.summary);
 
+  // 面试题注解：正文有「高频面试题」标题则由划线承载；否则在正文末尾合成条目（已生成→读，未生成→懒加载 AI 出题）
+  const interviewAnno = annotations.find((a: any) => a.type === 'interview') || null;
+  const needsInterviewEntry = interviewAnno ? !displayContent.includes('高频面试题') : true;
+
   return (
     <>
       <Drawer
@@ -172,6 +226,13 @@ export default function KnowledgeDrawer({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>{nodeData?.title || nodeId}</span>
+            {isLoggedIn && (
+              <Tooltip title={fav ? '取消收藏（顶栏 ⭐ 收藏可随时找回）' : '收藏这篇笔记（仅自己可见）'}>
+                <Button type="text" size="small"
+                  icon={fav ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                  onClick={toggleFav} />
+              </Tooltip>
+            )}
             <Tooltip title="放大阅读（全屏，可调字号）">
               <Button type="text" size="small" icon={<ExpandAltOutlined />}
                 onClick={() => setReaderOpen(true)} />
@@ -188,7 +249,7 @@ export default function KnowledgeDrawer({
         }}
       >
         {nodeData ? (
-          <div ref={contentRef} onMouseUp={handleMouseUp} style={{ userSelect: 'text', paddingBottom: 60 }}>
+          <div ref={contentRef} onMouseUp={handleMouseUp} onClick={onContentClick} style={{ userSelect: 'text', paddingBottom: 60 }}>
             {/* 标签区 */}
             <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {nodeData.layer && <Tag color="blue">{nodeData.layer}</Tag>}
@@ -210,7 +271,7 @@ export default function KnowledgeDrawer({
             {/* 标签 */}
             {nodeData.tags?.length > 0 && (
               <div style={{ marginBottom: 12 }}>
-                {nodeData.tags.map((t: string) => <Tag key={t}>#{t}</Tag>)}
+                {nodeData.tags.map((t: string) => <Tag key={t}>{t}</Tag>)}
               </div>
             )}
 
@@ -220,37 +281,35 @@ export default function KnowledgeDrawer({
             {/* 关联知识点 */}
             {linkedNodes && linkedNodes.length > 0 && (
               <>
-                <Divider>🔗 关联知识点</Divider>
+                <Divider>🔗 关联知识点（点击打开）</Divider>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {linkedNodes.map(l => (
-                    <Tag key={l.id} color="success" style={{ cursor: onOpenLinked ? 'pointer' : 'default' }}
-                      onClick={() => onOpenLinked?.(l.id)}>
-                      {l.title} ↗
-                    </Tag>
+                    <Tooltip key={l.id} title={`打开关联笔记《${l.title}》`}>
+                      <Tag color="success" style={{ cursor: onOpenLinked ? 'pointer' : 'default' }}
+                        onClick={() => onOpenLinked?.(l.id)}>
+                        {l.title} ↗
+                      </Tag>
+                    </Tooltip>
                   ))}
                 </div>
               </>
             )}
 
-            {/* 注释列表 */}
-            {annotations.length > 0 && (
-              <Card title={`💬 本篇注释（${annotations.length}）`} size="small" style={{ marginTop: 16 }}>
-                {annotations.map((a: any) => (
-                  <div key={a.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <Tag style={{ fontSize: 10 }}>
-                        {a.type === 'word' ? '词' : a.type === 'sentence' ? '句' : a.type === 'document' ? '整篇' : a.type}
-                      </Tag>
-                      <Tag color={a.status === 'approved' ? 'success' : a.status === 'pending' ? 'warning' : 'error'} style={{ fontSize: 10 }}>
-                        {a.status === 'approved' ? '已审核' : a.status === 'pending' ? '待审核' : '驳回'}
-                      </Tag>
-                      <span style={{ fontSize: 11, color: '#bfbfbf', marginLeft: 'auto' }}>{a.createdBy}</span>
-                    </div>
-                    {a.anchorText && <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 4 }}>「{a.anchorText.slice(0, 50)}…」</div>}
-                    <MarkdownContent content={a.answer || ''} fontSize={12.5} />
-                  </div>
-                ))}
-              </Card>
+            {/* 面试题入口：正文有「高频面试题」标题且已有注解 → 由 💼 高亮承载；否则正文末尾合成条目（未生成→懒加载） */}
+            {isLoggedIn && needsInterviewEntry && (
+              <div
+                className="anno-entry"
+                style={{ marginTop: 14 }}
+                onClick={() => interviewAnno ? setReadingAnno(interviewAnno) : setIvGenOpen(true)}>
+                {interviewAnno
+                  ? '💼 高频面试题 · 点击阅读'
+                  : '💼 高频面试题 · 还没有，点击让 AI 现场出题（生成后共享，下次秒开）'}
+              </div>
+            )}
+
+            {/* 正文里锚不上的其他注解（整篇注解 / 定位失败）：正文末尾合成条目兜底 */}
+            {isLoggedIn && (
+              <AnnotationEntries annotations={annotations} content={displayContent} onRead={setReadingAnno} />
             )}
 
             {/* 底部操作栏（sticky） */}
@@ -273,16 +332,17 @@ export default function KnowledgeDrawer({
                 </>
               )}
 
-              {/* 学习程度 */}
+              {/* 学习程度：明确的文字按钮，点开选掌握程度 */}
               {onLevelChange && (
-                <Popover content={levelPopover} trigger="click" title="标注学习程度">
-                  <Tooltip title={`当前：${current.name}（点击修改）`}>
-                    <span style={{
-                      cursor: 'pointer', fontSize: 18, color: current.color,
-                      width: 24, textAlign: 'center', userSelect: 'none',
-                      marginLeft: onNavigate ? 'auto' : 0,
-                    }}>{current.icon}</span>
-                  </Tooltip>
+                <Popover
+                  content={levelPopover}
+                  trigger="click" placement="topRight"
+                  title={<span>标注这篇的学习程度<small style={{ color: '#999', fontWeight: 400 }}>（图谱「按掌握度着色」会用它）</small></span>}>
+                  <Button size="small"
+                    icon={<span style={{ color: current.color }}>{current.icon}</span>}
+                    style={{ marginLeft: onNavigate ? 'auto' : 0 }}>
+                    学习程度：{current.name} ▾
+                  </Button>
                 </Popover>
               )}
 
@@ -304,27 +364,9 @@ export default function KnowledgeDrawer({
       </Drawer>
 
       {/* 浮动"解答"按钮 — 紧贴选区上方 4px */}
-      {selectionPos && (
-        <button
-          className="anno-float-btn"
-          onClick={openAnnotation}
-          style={{
-            position: 'fixed',
-            left: Math.max(8, Math.min(selectionPos.x - 34, window.innerWidth - 90)),
-            top: selectionPos.y - 32,
-            zIndex: 1100,
-            padding: '3px 10px', borderRadius: 6,
-            background: '#1677ff', color: '#fff', border: 'none',
-            cursor: 'pointer', fontSize: 12, fontWeight: 500,
-            boxShadow: '0 2px 6px rgba(22,119,255,0.4)',
-            transition: 'opacity 0.15s',
-          }}
-        >
-          💡 解答
-        </button>
-      )}
+      <AnnotationFloatButton pos={selectionPos} onClick={openAnnotation} />
 
-      {/* 划词注释弹窗 */}
+      {/* 划词注解弹窗 */}
       {isLoggedIn && nodeId && (
         <AnnotationModal
           key={annoKey}
@@ -335,6 +377,17 @@ export default function KnowledgeDrawer({
           anchorText={anchorText}
           onSaved={() => { onAnnotationSaved?.(); setAnnoKey(k => k + 1); }}
           userRole={userRole || 'user'}
+        />
+      )}
+
+      {/* 面试题懒加载生成弹窗：生成完落库后刷新注解列表，底部条目即变为可读 */}
+      {isLoggedIn && nodeId && (
+        <InterviewGenModal
+          open={ivGenOpen}
+          onClose={() => setIvGenOpen(false)}
+          nodeId={nodeId}
+          nodeTitle={nodeData?.title}
+          onSaved={() => onAnnotationSaved?.()}
         />
       )}
 
@@ -356,6 +409,8 @@ export default function KnowledgeDrawer({
         }
       >
         <div
+          ref={readerRef}
+          onClick={onContentClick}
           className="knowledge-drawer"
           style={{ maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', padding: '0 8px', userSelect: 'text' }}
         >
@@ -389,6 +444,9 @@ export default function KnowledgeDrawer({
         <Input.TextArea rows={8} value={noteText} onChange={e => setNoteText(e.target.value)}
           placeholder="写点只有自己看的理解/待办/联想…保存在你的账号下，换设备也在" />
       </Modal>
+
+      {/* 注解阅读弹窗（点正文荧光高亮 / 正文末尾兜底条目打开） */}
+      <AnnotationReadModal anno={readingAnno} onClose={() => setReadingAnno(null)} />
     </>
   );
 }

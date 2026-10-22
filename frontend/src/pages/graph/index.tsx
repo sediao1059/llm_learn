@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Spin } from 'antd';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
@@ -21,6 +22,7 @@ export default function GraphPage() {
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [annotations, setAnnotations] = useState<any[]>([]);
   const [annKey, setAnnKey] = useState(0);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     api.get('/knowledge/bundle.json').then(r => setData(r.data)).catch(() => {});
@@ -36,7 +38,21 @@ export default function GraphPage() {
     }
   }, [user]);
 
-  // 加载注释
+  // 足迹/收藏/我的注解等入口跳转：/?node=<id> 直接打开那篇笔记
+  const nodeParam = searchParams.get('node');
+  useEffect(() => {
+    if (nodeParam) setSelected(nodeParam);
+  }, [nodeParam]);
+
+  // AI 助手沉淀写入图谱后，动态层立即刷新（无需手动刷新页面）
+  useEffect(() => {
+    if (!user) return;
+    const reload = () => api.get('/ai/knowledge').then(r => setAiData(r.data)).catch(() => {});
+    window.addEventListener('kg:ai-knowledge-updated', reload);
+    return () => window.removeEventListener('kg:ai-knowledge-updated', reload);
+  }, [user]);
+
+  // 加载注解
   useEffect(() => {
     if (selected && user) {
       api.get(`/ai/annotations?nodeId=${selected}`).then(r => {
@@ -49,6 +65,40 @@ export default function GraphPage() {
     if (!chartRef.current) return;
     chart.current = echarts.init(chartRef.current);
     const onResize = () => chart.current?.resize();
+
+    // 空白处拖拽平移（全画布生效）：按下未命中任何元素（e.target 为空）时开始平移，
+    // 逐帧把位移加到 graph series 的画布组上（与 echarts 原生 updateViewOnPan 同路径），
+    // 并派发 graphRoam action 同步 center/zoom，保证后续 setOption 重渲染不丢平移量。
+    // _chartsViews 是 echarts 实例上的半私有字段，取不到时退化为只派发 action。
+    const zr = chart.current.getZr();
+    let panning = false;
+    let lastX = 0;
+    let lastY = 0;
+    zr.on('mousedown', (e: any) => {
+      if (e.target) return; // 命中节点/图例等元素时交还给 echarts（节点拖拽/图例点击）
+      panning = true;
+      lastX = e.offsetX;
+      lastY = e.offsetY;
+    });
+    zr.on('mousemove', (e: any) => {
+      if (!panning || !chart.current) return;
+      const dx = e.offsetX - lastX;
+      const dy = e.offsetY - lastY;
+      lastX = e.offsetX;
+      lastY = e.offsetY;
+      if (!dx && !dy) return;
+      const group = (chart.current as any)._chartsViews
+        ?.find((v: any) => v.type === 'graph')?.group;
+      if (group) {
+        group.x += dx;
+        group.y += dy;
+        group.dirty();
+      }
+      chart.current.dispatchAction({ type: 'graphRoam', seriesIndex: 0, dx, dy });
+    });
+    const stopPan = () => { panning = false; };
+    zr.on('mouseup', stopPan);
+    zr.on('globalout', stopPan);
     window.addEventListener('resize', onResize);
     return () => { window.removeEventListener('resize', onResize); chart.current?.dispose(); };
   }, []);
@@ -98,7 +148,9 @@ export default function GraphPage() {
       },
       legend: { data: data.categories, bottom: 10 },
       series: [{
-        type: 'graph', layout: 'force', roam: true, draggable: true,
+        // roam 只保留滚轮缩放；拖拽平移由下方自实现（echarts 原生平移仅对节点团包围盒内生效，
+        // 刚打开时节点聚在屏幕中央，画布边缘空白处按住拖不动）
+        type: 'graph', layout: 'force', roam: 'scale', draggable: true,
         categories: data.categories.map(name => ({ name })),
         force: { repulsion: 480, edgeLength: 140, gravity: 0.08 },
         label: { show: true, fontSize: 12, color: '#1a1a1a' },
@@ -147,6 +199,7 @@ export default function GraphPage() {
         level={selected ? (progress[selected] || 0) : 0}
         onLevelChange={user ? setLevel : undefined}
         linkedNodes={linkedNodes}
+        onOpenLinked={(refId) => setSelected(refId)}
         isLoggedIn={!!user}
         userRole={user?.role}
         annotations={annotations}

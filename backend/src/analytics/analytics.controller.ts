@@ -45,11 +45,11 @@ export class AnalyticsController {
       dailyMap[day].messages++;
       dailyMap[day].tokens += u.promptTokens + u.outputTokens;
     }
-    const dailyActivity = Object.entries(dailyMap)
-      .map(([date, v]) => ({ date, ...v }))
+    const dailyActivity: { date: string; messages: number; tokens: number; annotations: number }[] = Object.entries(dailyMap)
+      .map(([date, v]) => ({ date, annotations: 0, ...v }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // 近 30 天注释数（按天）
+    // 近 30 天注解数（按天）
     const recentAnnos = await this.prisma.annotation.findMany({
       where: { createdAt: { gte: thirtyDaysAgo } },
       select: { createdAt: true },

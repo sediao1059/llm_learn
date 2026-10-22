@@ -52,7 +52,7 @@ export default function InterviewTab() {
     { title: '状态', key: 'status', width: 130, render: (_: any, r: any) => (
       r.has ? (
         <Tag color={r.source === 'system' ? 'success' : 'processing'}>
-          {r.source === 'system' ? '✅ 原文提取' : `✅ AI·${r.source}`}
+          {r.source === 'system' ? '✅ 原文提取' : '✅ AI 生成'}
         </Tag>
       ) : <Tag color="error">❌ 缺失</Tag>
     )},
@@ -68,7 +68,7 @@ export default function InterviewTab() {
           {r.has ? '重新生成' : 'AI 生成'}
         </Button>
         {r.has && r.source !== 'system' && (
-          <Popconfirm title="确定删除这条面试题注释？" onConfirm={async () => {
+          <Popconfirm title="确定删除这条面试题注解？" onConfirm={async () => {
             await fetch(`/api/ai/annotations/${r.annoId}`, { method: 'DELETE', headers: headers() });
             message.success('已删除'); load();
           }}>
@@ -87,7 +87,7 @@ export default function InterviewTab() {
           🤖 一键补全缺失（{missing} 篇）
         </Button>
         <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-          {items.length - missing}/{items.length} 篇已有 · 面试题以注释形式呈现，点「查看」在弹窗中阅读
+          {items.length - missing}/{items.length} 篇已有 · 面试题以注解形式呈现，点「查看」在弹窗中阅读
         </span>
       </div>
       {generating && <Alert type="info" message="⏳ 正在后台生成，本页自动刷新进度…" style={{ marginBottom: 12 }} closable />}
@@ -101,7 +101,7 @@ export default function InterviewTab() {
         {viewItem && (
           <>
             <Tag color={viewItem.source === 'system' ? 'success' : 'processing'}>
-              {viewItem.source === 'system' ? '原文提取' : `AI 生成 · ${viewItem.source}`}
+              {viewItem.source === 'system' ? '原文提取' : 'AI 生成'}
             </Tag>
             <div
               style={{ marginTop: 16, lineHeight: 1.8, fontSize: 14 }}

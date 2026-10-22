@@ -112,7 +112,7 @@ export default function UploadPage() {
         <Statistic title="累计贡献分" value={contrib.total} />
         <p style={{ color: '#909399', fontSize: 12, marginTop: 8 }}>
           近 90 天活跃 {activeDays} 天<br />
-          上传入库 +8/篇 · 沉淀通过 +5 · 注释通过 +2
+          上传入库 +8/篇 · 沉淀通过 +5 · 注解通过 +2
         </p>
       </Card>
     </div>

@@ -16,3 +16,55 @@ body {
   background: rgba(245, 34, 45, 0.12);
   color: #c41d7f;
 }
+
+/* 注释锚定划线：知乎风荧光笔高亮（已审核全员可见）；自己的待审核叠加橙色虚线以示区别 */
+.anno-mark {
+  background: linear-gradient(to top, rgba(255, 204, 0, 0.35) 42%, transparent 42%);
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: background 0.15s;
+}
+.anno-mark:hover {
+  background: rgba(255, 204, 0, 0.45);
+}
+.anno-mark.pending {
+  border-bottom: 1.5px dashed #fa8c16;
+}
+/* 高频面试题注释：标题前加 💼 入口图标 */
+.anno-mark.interview::before {
+  content: '💼 ';
+}
+/* 学习程度标注选项（Popover 内）：hover 高亮 + 选中态 */
+.level-option {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  border: none; background: transparent; border-radius: 4px;
+  cursor: pointer; font-size: 13px; font-family: inherit;
+  color: #333; font-weight: 400;
+  transition: background 0.15s;
+}
+.level-option:hover { background: #f0f5ff; }
+.level-option.active { background: #f0f5ff; color: #1677ff; font-weight: 600; }
+.level-option.active:hover { background: #e6f4ff; }
+
+/* 正文中无法锚定的注释，在正文末尾渲染的合成条目（整篇注释/定位失败/未生成面试题） */
+.anno-entry {
+  padding: 8px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+  transition: background 0.15s, border-color 0.15s;
+}
+.anno-entry:hover {
+  background: #fffbe6;
+  border-color: #ffe58f;
+}
+
+/* 流式生成中的打字光标 */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

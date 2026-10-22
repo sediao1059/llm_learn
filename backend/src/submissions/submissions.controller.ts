@@ -9,7 +9,7 @@ import { LlmService } from '../llm/llm.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SubmissionsController {
   constructor(
     private prisma: PrismaService,
@@ -64,7 +64,9 @@ export class SubmissionsController {
     return { submissions: rows.map(r => this.pub(r)) };
   }
 
-  // ===== 沉淀预览与直写（管理员用） =====  @Post('ai/knowledge/preview')
+  // ===== 沉淀预览与直写（管理员用） =====
+  @Post('ai/knowledge/preview')
+  @Roles('admin')
   async preview(@Body() body: any) {
     const q = body.questionId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } }) : null;
     const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
@@ -79,6 +81,7 @@ export class SubmissionsController {
       ...aiNodes.map((n: any) => `- ${n.id}｜${n.title}｜${n.category}｜${n.layer || ''}｜（AI 沉淀）`),
     ];
     const system = `你是知识库整合助手。判断新问答应作为新知识点「创建」还是「合并」进已有知识点。
+content 写法：大白话直白表述，术语第一次出现紧跟括号翻译，先说结论再展开，不写空话；新建时开头第一行是「> **一句话**：…」摘要，合并时只写目标还没有的新信息。
 严格输出 JSON：{"action":"create 或 merge","reason":"一句话理由","title":"","category":"","layer":"","tags":[],"links":[],"content":"markdown","targetId":""}`;
     const r = await this.llm.chatText(model, {
       system,
@@ -91,13 +94,23 @@ export class SubmissionsController {
       const decision = JSON.parse(r.text.slice(start, end + 1));
       const knownIds = new Set([...bundle.nodes.map((n: any) => n.id), ...aiNodes.map(n => n.id)]);
       decision.links = (decision.links || []).filter((id: string) => knownIds.has(id));
-      return { decision };
+      // 附带标题信息，供前端预览弹窗展示合并目标与将建立的关联
+      const titles = new Map<string, string>([
+        ...bundle.nodes.map((n: any) => [n.id, n.title] as [string, string]),
+        ...aiNodes.map((n: any) => [n.id, n.title] as [string, string]),
+      ]);
+      return {
+        decision,
+        targetTitle: titles.get(decision.targetId) || decision.targetId || '',
+        linkTitles: (decision.links || []).map((id: string) => ({ id, title: titles.get(id) || id })),
+      };
     } catch {
       throw new BadRequestException('模型返回的判断结果无法解析，请重试');
     }
   }
 
   @Post('ai/knowledge/apply')
+  @Roles('admin')
   async apply(@Body() body: any, @CurrentUser() user: CurrentUserType) {
     const decision = body.decision || {};
     const bundle = await this.knowledge.getBundleObj();
@@ -163,6 +176,7 @@ export class SubmissionsController {
       ...aiNodes.map(n => `- ${n.id}｜${n.title}｜${n.category}｜（AI 沉淀）`),
     ];
     const system = `你是知识库整合助手。判断这组问答应「创建」新知识点还是「合并」进已有。
+content 写法：大白话直白表述，术语第一次出现紧跟括号翻译，先说结论再展开，不写空话；新建时开头第一行是「> **一句话**：…」摘要，合并时只写目标还没有的新信息。
 严格输出 JSON：{"action":"","reason":"","title":"","category":"","layer":"","tags":[],"links":[],"content":"","targetId":""}`;
     const r = await this.llm.chatText(model, {
       system,

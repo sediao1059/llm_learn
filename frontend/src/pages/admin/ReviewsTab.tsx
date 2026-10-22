@@ -120,7 +120,7 @@ export default function ReviewsTab() {
           pagination={{ pageSize: 5 }} />
       </Card>
 
-      <Card title={`划词注释（${annos.length}）`}>
+      <Card title={`划词注解（${annos.length}）`}>
         {annos.length === 0 ? <Empty description="暂无" image={Empty.PRESENTED_IMAGE_SIMPLE} /> :
         annos.map(a => (
           <Card key={a.id} style={{ marginBottom: 8 }}>
@@ -141,7 +141,7 @@ export default function ReviewsTab() {
                     }}>通过</Button>
                     <Button danger onClick={() => {
                       Modal.confirm({
-                        title: '驳回注释', content: <Input id="anno-reject" placeholder="理由" />,
+                        title: '驳回注解', content: <Input id="anno-reject" placeholder="理由" />,
                         onOk: async () => {
                           const reason = (document.getElementById('anno-reject') as HTMLInputElement)?.value;
                           if (!reason?.trim()) return Promise.reject();

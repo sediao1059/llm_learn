@@ -1,5 +1,6 @@
 import { Card, Tabs, Badge } from 'antd';
 import UsersTab from './UsersTab';
+import ModelsTab from './ModelsTab';
 import InvitesTab from './InvitesTab';
 import ReviewsTab from './ReviewsTab';
 import UploadsTab from './UploadsTab';
@@ -17,6 +18,7 @@ export default function AdminPage() {
           defaultActiveKey="users"
           items={[
             { key: 'users', label: '用户管理', children: <UsersTab /> },
+            { key: 'models', label: '⚙ 模型配置', children: <ModelsTab /> },
             { key: 'invites', label: '邀请码', children: <InvitesTab /> },
             { key: 'reviews', label: <span>沉淀审核</span>, children: <ReviewsTab /> },
             { key: 'uploads', label: '上传审核', children: <UploadsTab /> },

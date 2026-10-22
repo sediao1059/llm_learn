@@ -3,6 +3,7 @@ import { Card, Progress, Tag, Button, Empty, Spin, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import TreeView from './TreeView';
 import GenerateModal from './GenerateModal';
+import TopicContentDrawer from './TopicContentDrawer';
 import KnowledgeDrawer from '../../components/KnowledgeDrawer';
 import { useAuth } from '../../store/auth';
 
@@ -18,6 +19,13 @@ function collectRouteRefIds(tree: any): string[] {
   return tree.stages.flatMap((st: any) => collect(st.items));
 }
 
+/** 按定位链在路线树里找主题条目：addr[0]=阶段下标，addr[1]=主题下标，之后为子主题下标链 */
+function findTopic(tree: any, addr: number[]): any | null {
+  let item = tree?.stages?.[addr[0]]?.items?.[addr[1]];
+  for (let i = 2; i < addr.length && item; i++) item = item.children?.[addr[i]];
+  return item || null;
+}
+
 export default function PathsPage() {
   const { user } = useAuth();
   const [paths, setPaths] = useState<any[]>([]);
@@ -31,6 +39,21 @@ export default function PathsPage() {
 
   const [articleNodeId, setArticleNodeId] = useState<string | null>(null);
   const [extending, setExtending] = useState(false);
+  const [annotations, setAnnotations] = useState<any[]>([]);
+  const [annKey, setAnnKey] = useState(0);
+
+  // 加载当前打开文章的注解（划词注解下划线渲染用）
+  useEffect(() => {
+    if (articleNodeId && user) {
+      fetch(`/api/ai/annotations?nodeId=${articleNodeId}`, { headers: headers() })
+        .then(r => r.json())
+        .then(d => setAnnotations(d.annotations || []))
+        .catch(() => setAnnotations([]));
+    } else setAnnotations([]);
+  }, [articleNodeId, user, annKey]);
+
+  /** 新主题懒加载抽屉：当前打开的主题定位（阶段下标 + 主题下标链） */
+  const [topicAddr, setTopicAddr] = useState<number[] | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -112,6 +135,21 @@ export default function PathsPage() {
     finally { setExtending(false); }
   };
 
+  /** 新主题内容生成完成：回写本地路线树（Tag 变「已生成」，下次点开直接读缓存） */
+  const writeTopicContent = (addr: number[], content: string) => {
+    if (!selectedId) return;
+    setPaths(prev => prev.map(p => {
+      if (p.id !== selectedId || !p.tree) return p;
+      const t = JSON.parse(JSON.stringify(p.tree));
+      const item = findTopic(t, addr);
+      if (item && !item.refId) item.content = content;
+      return { ...p, tree: t };
+    }));
+  };
+
+  const topicItem = topicAddr && selected ? findTopic(selected.tree, topicAddr) : null;
+  const topicStageTitle = topicAddr && selected ? selected.tree?.stages?.[topicAddr[0]]?.title : undefined;
+
   return (
     <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)', maxWidth: 1280, margin: '0 auto' }}>
       <div style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
@@ -124,7 +162,7 @@ export default function PathsPage() {
             const pct = routePct(p);
             const isSelected = p.id === selectedId;
             return (
-              <Card key={p.id} size="small" hoverable onClick={() => setSelectedId(p.id)}
+              <Card key={p.id} size="small" hoverable onClick={() => { setSelectedId(p.id); setTopicAddr(null); }}
                 style={{
                   marginBottom: 10, cursor: 'pointer',
                   border: isSelected ? '2px solid #1677ff' : '1px solid #e8e8e8',
@@ -168,6 +206,7 @@ export default function PathsPage() {
             onAIAdjust={() => { setGenPathId(selected.id); setGenOpen(true); }}
             onTitleChange={(id, title) => setPaths(prev => prev.map(p => p.id === id ? { ...p, title } : p))}
             onArticleOpen={(refId) => setArticleNodeId(refId)}
+            onOpenTopic={(addr) => setTopicAddr(addr)}
           />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -197,7 +236,20 @@ export default function PathsPage() {
           onOpenLinked={(refId) => setArticleNodeId(refId)}
           isLoggedIn={!!user}
           userRole={user?.role}
-          onAnnotationSaved={() => message.success('注释已保存')}
+          annotations={annotations}
+          onAnnotationSaved={() => { message.success('注解已保存'); setAnnKey(k => k + 1); }}
+        />
+      )}
+
+      {topicAddr && selected && (
+        <TopicContentDrawer
+          open={!!topicAddr}
+          onClose={() => setTopicAddr(null)}
+          pathId={selected.id}
+          addr={topicAddr}
+          topic={topicItem}
+          stageTitle={topicStageTitle}
+          onGenerated={(content) => writeTopicContent(topicAddr, content)}
         />
       )}
 

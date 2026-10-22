@@ -107,8 +107,11 @@ export class UploadsController {
       const cols = await this.prisma.aiNode.findMany({ where: { id: { startsWith: 'col-' } }, select: { id: true, title: true } });
       const system = up.kind === 'url'
         ? `你是知识采集引擎。把网页文章拆解成 1~5 个知识点（markdown 笔记+检索标签+关联已有 id+专栏建议）。
-严格输出 JSON：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]"`
+- 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要：外行能听懂，能打比方就打比方
+- 正文直白表述：术语第一次出现紧跟括号翻译，先说结论再展开，不写空话套话
+严格输出 JSON：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]`
         : `你是知识整理引擎。把用户文本格式化成 1~5 个知识点（不添加原文没有的内容）。
+- 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要；术语第一次出现紧跟括号翻译，直白表述不写空话
 严格输出 JSON：{"collection":{"mode":"new","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]}`;
       const r = await this.llm.chatText(model, {
         system,

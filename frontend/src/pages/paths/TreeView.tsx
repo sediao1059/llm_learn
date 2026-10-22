@@ -22,9 +22,10 @@ interface Props {
   onAIAdjust: () => void;
   onTitleChange: (id: number, title: string) => void;
   onArticleOpen: (refId: string) => void;
+  onOpenTopic: (addr: number[]) => void;
 }
 
-export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust, onTitleChange, onArticleOpen }: Props) {
+export default function TreeView({ path, progress, refTitles, onLevelChange, onBatchLevel, onAIAdjust, onTitleChange, onArticleOpen, onOpenTopic }: Props) {
   const tree = path.tree;
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -120,8 +121,10 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
                     topic={item}
                     level={item.refId ? (progress[item.refId] || 0) : 0}
                     refTitle={item.refId ? refTitles[item.refId] : undefined}
+                    addr={[si, ii]}
                     onLevelChange={onLevelChange}
                     onArticleOpen={onArticleOpen}
+                    onOpenTopic={onOpenTopic}
                   />
                 ))}
               </>

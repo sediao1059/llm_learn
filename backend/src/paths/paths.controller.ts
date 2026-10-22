@@ -1,7 +1,8 @@
 import {
   Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards,
-  BadRequestException, NotFoundException, ForbiddenException,
+  BadRequestException, NotFoundException, ForbiddenException, Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
@@ -13,7 +14,7 @@ import { KnowledgeService } from '../knowledge/knowledge.service';
 const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师。基于图谱里已有的知识点清单和用户的学习目标，规划一条阶段清晰、可执行的学习路线。
 - 路线是多层树：阶段 → 主题 → 子主题（最多三层）
 - 每个主题尽量复用清单里已有的知识点（填 refId）
-- 阶段 3~6 个，每阶段 3~8 个主题，每个主题给一句 why
+- 阶段 3~6 个，每阶段 3~8 个主题；每个主题的 why 用一句大白话说清「学它干嘛、解决什么问题」，不写空话
 严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":"","children":[]}]}]}`;
 
 @Controller()
@@ -128,7 +129,7 @@ export class PathsController {
     }
 
     const system = `你是学习路线编辑助手。用户想把一个新知识点插入到已有学习路线的最合适位置。
-- 只在合适的阶段插入这个知识点（标题 + refId + why），不改动其他内容
+- 只在合适的阶段插入这个知识点（标题 + refId + 一句大白话 why），不改动其他内容
 - 如果需要可以在现有阶段中插入，也可以新建一个阶段（仅在确实需要时）
 - 输出更新后的完整路线 JSON（格式与输入完全相同）
 严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":""}]}]}`;
@@ -169,6 +170,130 @@ id: ${nodeId}
       return { tree: raw };
     } catch (e: any) {
       throw new BadRequestException('路线更新校验失败：' + e.message + '，请重试');
+    }
+  }
+
+  /** 在路线树 JSON 中按「阶段下标 + 主题下标链」定位条目（原地引用，用于回填 content） */
+  private locateItem(tree: any, stageIdx: number, itemPath: number[]): any | null {
+    const stage = tree?.stages?.[stageIdx];
+    let item: any = stage?.items?.[itemPath[0]];
+    for (let i = 1; i < itemPath.length && item; i++) item = item.children?.[itemPath[i]];
+    return item || null;
+  }
+
+  /**
+   * 新主题懒加载生成（SSE 流式）：点击路线上未关联知识点的「新主题」时，
+   * 按路线上下文流式生成一篇 markdown 学习内容；生成完写入路线树 JSON 缓存（item.content），
+   * 下次点击直接命中缓存不再调模型。force=true 可重新生成覆盖。
+   */
+  @Post('ai/paths/:id/topic-content')
+  async topicContent(
+    @Param('id') id: number,
+    @Body() body: any,
+    @CurrentUser() user: CurrentUserType,
+    @Res() res: Response,
+  ) {
+    const row = await this.prisma.learningPath.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('路线不存在');
+    const stageIdx = Number(body.stageIdx);
+    const itemPath: number[] = Array.isArray(body.itemPath) ? body.itemPath.map(Number) : [];
+    if (!Number.isInteger(stageIdx) || stageIdx < 0 || !itemPath.length || itemPath.some(i => !Number.isInteger(i) || i < 0)) {
+      throw new BadRequestException('主题定位不正确');
+    }
+
+    let tree: any;
+    try { tree = JSON.parse(row.tree); } catch { throw new BadRequestException('路线数据损坏'); }
+    const stage = tree.stages?.[stageIdx];
+    const item = this.locateItem(tree, stageIdx, itemPath);
+    if (!stage || !item) throw new BadRequestException('主题不存在');
+    if (item.refId) throw new BadRequestException('该主题已关联知识点，请直接点击打开');
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Accel-Buffering': 'no',
+      Connection: 'keep-alive',
+    });
+    const send = (event: string, data: any) => {
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* 断开 */ }
+    };
+    const heartbeat = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch { /* ignore */ }
+    }, 10000);
+    const done = () => { clearInterval(heartbeat); res.end(); };
+
+    // 缓存命中：不调模型，直接整篇返回
+    if (item.content && !body.force) {
+      send('result', { content: item.content, cached: true });
+      done();
+      return;
+    }
+
+    const model = await this.llm.getGlobalModel();
+    if (!model) { send('error', { error: '尚未配置全局默认模型' }); done(); return; }
+
+    const bundle = await this.knowledge.getBundleObj();
+    const lines = bundle.nodes.slice(0, 200).map((n: any) => `- ${n.title}（${n.category}）`);
+
+    const lv = user.profileTags?.level === 'expert' ? '老手（直接讲进阶细节与工程取舍）' : '新手（从打地基开始，术语第一次出现要翻译）';
+    const focus = (user.profileTags?.focus || []).join('、') || '未指定';
+    const system = `你是「LLM 学习知识图谱」的知识讲解作者，为学习路线中的一个主题写一篇可直接阅读的学习笔记。写作第一原则：**直白**——把稿子念给刚入行的人听，能一次听懂才算合格。
+- 第一行必须是「> **一句话**：…」摘要：用大白话+比喻说清这个主题是干什么的（例如「KV Cache 就是模型做题时的草稿纸」），不许出现没解释的缩写和黑话
+- 每个小节的第一句话先用大白话点明这节讲什么、结论是什么，再展开细节；先讲「就像…」「比如…」，不要一上来堆术语
+- 术语第一次出现必须紧跟括号翻译，如「PagedAttention（把缓存像操作系统内存一样分页管理）」，之后可直接用
+- 具体例子、表格优先于抽象长段落；公式出现前先用文字说清它在算什么、为什么要算
+- 不写空话套话（「赋能」「闭环」「范式」之类），不用名词堆砌充数
+- 输出标准 markdown：小节用 ##、子节用 ###；适当使用列表、表格、代码块
+- 内容 800~2000 字，自成一体：这个主题是什么 → 为什么需要它 → 核心原理 → 上手示例 → 常见坑
+- 与已有知识点清单相关的内容可以自然提一句（用知识点标题），但不要罗列清单
+- 严格按用户画像调整深浅（新手多比喻多翻译；老手可直给参数与工程取舍，但结论仍要先说人话），不要输出与主题无关的寒暄`;
+
+    const userPrompt = `【用户画像】大模型${lv}；关注方向：${focus}
+【所属路线】${row.title}（目标：${row.goal || '未填写'}）
+【所属阶段】${stage.title}${stage.goal ? `（${stage.goal}）` : ''}
+【主题】${item.title}
+${item.why ? `【路线里给这个主题的定位】${item.why}\n` : ''}已有知识点清单（供关联参考）：
+${lines.join('\n')}
+
+请为主题「${item.title}」写这篇学习笔记。`;
+
+    try {
+      const r = await this.llm.chatStream(model, {
+        system,
+        messages: [{ role: 'user', content: userPrompt }],
+        onDelta: t => send('delta', { text: t }),
+        timeoutMs: 240 * 1000,
+      });
+      if (!r.ok) {
+        send('error', { error: r.error || '生成失败' });
+      } else {
+        // 回填缓存：重新读最新树再写入，尽量不覆盖他人并发改动；只填 content 不动其他字段
+        const latest = await this.prisma.learningPath.findUnique({ where: { id } });
+        if (latest) {
+          try {
+            const t2 = JSON.parse(latest.tree);
+            const it = this.locateItem(t2, stageIdx, itemPath);
+            if (it && !it.refId && (body.force || !it.content)) {
+              it.content = r.text;
+              await this.prisma.learningPath.update({ where: { id }, data: { tree: JSON.stringify(t2) } });
+            }
+          } catch { /* 缓存写失败不影响返回 */ }
+        }
+        // 记录 LLM 用量（token 按文本长度/4 粗估）
+        this.prisma.llmUsage.create({
+          data: {
+            userId: user.id, username: user.username,
+            modelName: model.name || model.modelId,
+            promptTokens: Math.ceil((system.length + userPrompt.length) / 4),
+            outputTokens: Math.ceil(r.text.length / 4),
+          },
+        }).catch(() => {});
+        send('result', { content: r.text, cached: false });
+      }
+    } catch (e: any) {
+      send('error', { error: String(e?.message || e) });
+    } finally {
+      done();
     }
   }
 

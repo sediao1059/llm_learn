@@ -17,7 +17,7 @@ interface Props {
   userRole: string;
 }
 
-/** 自动检测注释类型：<10 字=词，≥10 字=句，无选中文本=整篇 */
+/** 自动检测注解类型：<10 字=词，≥10 字=句，无选中文本=整篇 */
 function detectType(text: string): string {
   if (!text) return 'document';
   return text.trim().length < 10 ? 'word' : 'sentence';
@@ -151,7 +151,7 @@ export default function AnnotationModal({
       }),
     });
     if (r.ok) {
-      message.success('注释已保存');
+      message.success('注解已保存');
       onSaved();
       onClose();
     } else {
@@ -167,6 +167,7 @@ export default function AnnotationModal({
       open={open} onCancel={onClose}
       title={`💡 划词解答 · ${typeLabel}注`} width={520}
       footer={null} destroyOnClose
+      maskClosable={!(streaming || distilling)} keyboard={!(streaming || distilling)}
     >
       {/* 选中文本引用 */}
       {anchorText && (
@@ -179,13 +180,13 @@ export default function AnnotationModal({
         </div>
       )}
       {!anchorText && (
-        <Tag style={{ marginBottom: 12 }}>📝 整篇注释 · {nodeTitle}</Tag>
+        <Tag style={{ marginBottom: 12 }}>📝 整篇注解 · {nodeTitle}</Tag>
       )}
 
       {/* 预览模式 */}
       {preview !== null ? (
         <div>
-          <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>AI 已将对话提炼为以下注释（可直接编辑）：</p>
+          <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>AI 已将对话提炼为以下注解（可直接编辑）：</p>
           <Input.TextArea
             value={preview} onChange={e => setPreview(e.target.value)}
             rows={8} style={{ fontSize: 13, lineHeight: 1.8 }}
@@ -193,7 +194,7 @@ export default function AnnotationModal({
           <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
             <Button onClick={() => setPreview(null)}>← 返回对话</Button>
             <Button type="primary" icon={<SaveOutlined />} onClick={save}>
-              确认存为注释
+              确认存为注解
             </Button>
           </div>
         </div>
@@ -208,7 +209,7 @@ export default function AnnotationModal({
               <div style={{ textAlign: 'center', paddingTop: 80, color: '#8c8c8c', fontSize: 13 }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>💡</div>
                 <p>输入问题，AI 会针对选中的文字进行解答</p>
-                <p style={{ fontSize: 11 }}>可以多次追问 · 满意后点「存为注释」提炼入库</p>
+                <p style={{ fontSize: 11 }}>可以多次追问 · 满意后点「存为注解」提炼入库</p>
               </div>
             )}
             {messages.map((m, i) => (
@@ -251,7 +252,7 @@ export default function AnnotationModal({
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
             <Button icon={<SaveOutlined />} loading={distilling} onClick={distill}
               disabled={messages.filter(m => m.content.trim()).length === 0}>
-              💾 存为注释（AI 提炼）
+              💾 存为注解（AI 提炼）
             </Button>
           </div>
         </>

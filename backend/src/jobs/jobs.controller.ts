@@ -146,5 +146,5 @@ export class JobsController {
   }
 }
 
-// ============ 面试题注释状态（供管理页展示） ============
+// ============ 面试题注解状态（供管理页展示） ============
 import { Controller as _C, Get as _G, UseGuards as _UG } from '@nestjs/common';

@@ -1,4 +1,4 @@
-import { Tag, Popover } from 'antd';
+import { Tag, Popover, Tooltip } from 'antd';
 
 const LEVELS = [
   { v: 0, name: '未学习', icon: '○', color: '#d9d9d9' },
@@ -11,6 +11,7 @@ interface Topic {
   title: string;
   refId?: string;
   why?: string;
+  content?: string;
   children?: Topic[];
 }
 
@@ -18,12 +19,18 @@ interface Props {
   topic: Topic;
   level: number;
   refTitle?: string;
+  /** 主题在路线树中的定位：addr[0]=阶段下标，其余为逐层下标链 */
+  addr: number[];
   onLevelChange: (refId: string, level: number) => void;
   onArticleOpen?: (refId: string) => void;
+  /** 点击「新主题」打开懒加载生成抽屉 */
+  onOpenTopic?: (addr: number[]) => void;
   depth?: number;
 }
 
-export default function TopicRow({ topic, level, refTitle, onLevelChange, onArticleOpen, depth = 0 }: Props) {
+export default function TopicRow({
+  topic, level, refTitle, addr, onLevelChange, onArticleOpen, onOpenTopic, depth = 0,
+}: Props) {
   const current = LEVELS[level] || LEVELS[0];
 
   const popoverContent = (
@@ -32,13 +39,7 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
         <button
           key={l.v}
           onClick={() => topic.refId && onLevelChange(topic.refId, l.v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
-            border: 'none', background: level === l.v ? '#f0f5ff' : 'transparent',
-            borderRadius: 4, cursor: 'pointer', fontSize: 13,
-            color: level === l.v ? '#1677ff' : '#333',
-            fontWeight: level === l.v ? 600 : 400,
-          }}
+          className={`level-option${level === l.v ? ' active' : ''}`}
         >
           <span style={{ color: l.color, fontSize: 14, width: 16, textAlign: 'center' }}>{l.icon}</span>
           {l.name}
@@ -47,9 +48,16 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
     </div>
   );
 
+  // 已关联知识点 → 打开笔记；新主题 → 懒加载 AI 生成学习内容
   const handleTitleClick = () => {
-    if (topic.refId && onArticleOpen) onArticleOpen(topic.refId);
+    if (topic.refId) {
+      onArticleOpen?.(topic.refId);
+    } else {
+      onOpenTopic?.(addr);
+    }
   };
+
+  const clickable = topic.refId ? !!onArticleOpen : !!onOpenTopic;
 
   return (
     <div style={{ paddingLeft: depth * 24 }}>
@@ -60,7 +68,7 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
         }}
       >
         <Popover content={popoverContent} trigger="click" placement="left"
-          title={topic.refId ? '标注学习程度' : '该主题暂未关联知识点'}>
+          title={topic.refId ? '标注学习程度' : '该主题暂未关联知识点，点击标题可让 AI 生成学习内容'}>
           <span
             style={{
               cursor: topic.refId ? 'pointer' : 'default',
@@ -74,16 +82,18 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
           </span>
         </Popover>
 
-        <span
-          style={{
-            fontSize: 13.5, fontWeight: 500, flex: 1,
-            cursor: topic.refId && onArticleOpen ? 'pointer' : 'default',
-            color: topic.refId ? '#1677ff' : '#333',
-          }}
-          onClick={handleTitleClick}
-        >
-          {topic.title}
-        </span>
+        <Tooltip title={topic.refId ? undefined : '点击让 AI 生成这篇学习内容（首次生成后缓存）'}>
+          <span
+            style={{
+              fontSize: 13.5, fontWeight: 500, flex: 1,
+              cursor: clickable ? 'pointer' : 'default',
+              color: topic.refId ? '#1677ff' : '#722ed1',
+            }}
+            onClick={handleTitleClick}
+          >
+            {topic.title}
+          </span>
+        </Tooltip>
 
         {topic.refId ? (
           <Tag
@@ -93,8 +103,24 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
           >
             🔗 {refTitle || topic.refId}
           </Tag>
+        ) : topic.content ? (
+          <Tag
+            color="purple"
+            style={{ cursor: clickable ? 'pointer' : 'default', fontSize: 11, margin: 0 }}
+            onClick={handleTitleClick}
+          >
+            ✨ 已生成
+          </Tag>
         ) : (
-          <Tag style={{ fontSize: 11, margin: 0, color: '#8c8c8c' }}>新主题</Tag>
+          <Tooltip title="点击让 AI 生成这篇学习内容">
+            <Tag
+              color="purple"
+              style={{ cursor: clickable ? 'pointer' : 'default', fontSize: 11, margin: 0, background: '#f9f0ff' }}
+              onClick={handleTitleClick}
+            >
+              ✨ AI 生成
+            </Tag>
+          </Tooltip>
         )}
       </div>
 
@@ -110,8 +136,10 @@ export default function TopicRow({ topic, level, refTitle, onLevelChange, onArti
           topic={child}
           level={child.refId ? level : 0}
           refTitle={refTitle}
+          addr={[...addr, i]}
           onLevelChange={onLevelChange}
           onArticleOpen={onArticleOpen}
+          onOpenTopic={onOpenTopic}
           depth={depth + 1}
         />
       ))}

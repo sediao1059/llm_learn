@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Tag, Drawer, Form, Select, Space, Popconfirm, message } from 'antd';
+import { Table, Button, Tag, Drawer, Form, Select, Space, Popconfirm, Tooltip, message } from 'antd';
+import { useAuth } from '../../store/auth';
 
 const FOCUS = [
   { value: 'rag', label: '应用与RAG' }, { value: 'agent', label: 'Agent开发' },
@@ -7,6 +8,7 @@ const FOCUS = [
 ];
 
 export default function UsersTab() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
@@ -40,8 +42,10 @@ export default function UsersTab() {
         {r.nickname && <span style={{ color: '#8c8c8c', marginLeft: 6, fontSize: 12 }}>{r.nickname}</span>}
       </div>
     )},
-    { title: '角色', dataIndex: 'role', width: 90, render: (v: string) =>
-      v === 'admin' ? <Tag color="success">🛡 管理员</Tag> : <Tag>普通用户</Tag> },
+    { title: '角色', dataIndex: 'role', width: 110, render: (v: string, r: any) =>
+      r.isSuper ? <Tag color="gold">👑 超级管理员</Tag>
+        : v === 'admin' ? <Tag color="success">🛡 管理员</Tag>
+        : <Tag>普通用户</Tag> },
     { title: '对话', dataIndex: 'totalChats', width: 60, render: (v: number) => v || 0 },
     { title: 'Token', dataIndex: 'totalTokens', width: 80,
       render: (v: number) => v ? (v > 999 ? `${(v / 1000).toFixed(1)}k` : v) : '0' },
@@ -70,10 +74,13 @@ export default function UsersTab() {
           form.setFieldsValue({ level: r.profileTags?.level, focus: r.profileTags?.focus || [] });
         }}>画像</Button>
         <Popconfirm title={`确定${r.status === 'enabled' ? '禁用' : '启用'}「${r.username}」？`}
-          onConfirm={() => patch(r.id, { status: r.status === 'enabled' ? 'disabled' : 'enabled' })}>
-          <Button size="small" danger={r.status === 'enabled'}>
-            {r.status === 'enabled' ? '禁用' : '启用'}
-          </Button>
+          onConfirm={() => patch(r.id, { status: r.status === 'enabled' ? 'disabled' : 'enabled' })}
+          disabled={r.isSuper}>
+          <Tooltip title={r.isSuper ? '超级管理员（第一个注册的用户）不能被禁用' : ''}>
+            <Button size="small" danger={r.status === 'enabled'} disabled={r.isSuper}>
+              {r.status === 'enabled' ? '禁用' : '启用'}
+            </Button>
+          </Tooltip>
         </Popconfirm>
         <Popconfirm title={`${r.llmBanned ? '恢复' : '禁止'}「${r.username}」使用 AI 功能？${r.llmBanned ? '' : '（不影响浏览知识图谱）'}`}
           onConfirm={() => patch(r.id, { llmBanned: !r.llmBanned })}>
@@ -85,7 +92,11 @@ export default function UsersTab() {
           <Popconfirm title={`确定提升「${r.username}」为管理员？`} onConfirm={() => patch(r.id, { role: 'admin' })}>
             <Button>设管理</Button>
           </Popconfirm>
-        ) : r.username !== JSON.parse(localStorage.getItem('llm_learn_user') || '{}').username ? (
+        ) : r.isSuper ? (
+          <Tooltip title="第一个注册的用户是超级管理员，不能撤销其管理员权限">
+            <Button size="small" disabled>撤管理</Button>
+          </Tooltip>
+        ) : r.username !== me?.username ? (
           <Popconfirm title={`确定收回「${r.username}」管理员权限？`} onConfirm={() => patch(r.id, { role: 'user' })}>
             <Button>撤管理</Button>
           </Popconfirm>
@@ -96,6 +107,9 @@ export default function UsersTab() {
 
   return (
     <>
+      <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 12 }}>
+        👑 第一个注册的用户是超级管理员（有且仅有一个），不能被禁用、也不能撤销其管理员权限；其他用户可在此提升/收回管理员。
+      </p>
       <Table
         dataSource={users} columns={columns} rowKey="id"
         loading={loading}

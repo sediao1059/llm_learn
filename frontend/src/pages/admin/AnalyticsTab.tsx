@@ -26,7 +26,7 @@ export default function AnalyticsTab() {
     const days = data.dailyActivity;
     chart.setOption({
       tooltip: { trigger: 'axis' },
-      legend: { data: ['对话次数', 'Token 消耗', '注释数'], bottom: 0 },
+      legend: { data: ['对话次数', 'Token 消耗', '注解数'], bottom: 0 },
       grid: { top: 20, left: 50, right: 50, bottom: 40 },
       xAxis: { type: 'category', data: days.map((d: any) => d.date.slice(5)) },
       yAxis: [
@@ -38,7 +38,7 @@ export default function AnalyticsTab() {
           itemStyle: { color: '#1677ff' } },
         { name: 'Token 消耗', type: 'line', smooth: true, yAxisIndex: 1,
           data: days.map((d: any) => d.tokens), itemStyle: { color: '#faad14' } },
-        { name: '注释数', type: 'line', smooth: true, data: days.map((d: any) => d.annotations || 0),
+        { name: '注解数', type: 'line', smooth: true, data: days.map((d: any) => d.annotations || 0),
           itemStyle: { color: '#52c41a' } },
       ],
     });
@@ -77,7 +77,7 @@ export default function AnalyticsTab() {
         <Col span={4}><Card size="small"><Statistic title="活跃用户(7天)" value={ov.activeUsers7d || 0} valueStyle={{ color: '#52c41a' }} /></Card></Col>
         <Col span={4}><Card size="small"><Statistic title="知识点" value={(ov.totalNotes || 0) + (ov.totalAiNodes || 0)} suffix={` (${ov.totalAiNodes || 0} AI)`} /></Card></Col>
         <Col span={4}><Card size="small"><Statistic title="对话总数" value={ov.totalMessages || 0} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="注释" value={ov.totalAnnotations || 0} /></Card></Col>
+        <Col span={4}><Card size="small"><Statistic title="注解" value={ov.totalAnnotations || 0} /></Card></Col>
         <Col span={4}><Card size="small"><Statistic title="Token 总量" value={ov.totalTokens || 0} valueStyle={{ color: '#faad14' }} /></Card></Col>
       </Row>
 
