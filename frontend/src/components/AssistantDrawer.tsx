@@ -452,8 +452,7 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 6 }}
-                placeholder={currentChatId ? '输入问题，Enter 发送，Shift+Enter 换行' : '输入问题开始新对话（Enter 发送）'}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder={currentChatId ? '输入问题，点「发送」按钮发送（回车换行）' : '输入问题开始新对话，点「发送」按钮发送'}
                 disabled={!user}
               />
               <Button type="primary" icon={<SendOutlined />} loading={streaming}

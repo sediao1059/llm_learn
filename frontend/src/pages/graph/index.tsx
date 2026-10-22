@@ -300,7 +300,7 @@ export default function GraphPage() {
 
   return (
     <div style={{ display: 'flex', position: 'relative', height: 'calc(100vh - 56px)' }}>
-      <div ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
+      <div id="graph-canvas" ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
 
       {/* 筛选浮条：默认折叠收起，按钮上徽标显示生效的筛选条件数；容器不拦截图谱拖拽 */}
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, display: 'flex', alignItems: 'flex-start', gap: 8, maxWidth: 'calc(100% - 24px)', pointerEvents: 'none' }}>
@@ -363,6 +363,7 @@ export default function GraphPage() {
         <Tooltip title="按关键词、标签、难度缩小图谱范围，只看想看的笔记；再点一次收起来">
           <Badge count={activeFilterCount} size="small" offset={[-4, 4]}>
             <Button
+              id="graph-filter-btn"
               icon={<FilterOutlined />}
               onClick={() => setFilterOpen(v => !v)}
               style={{ pointerEvents: 'auto', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}

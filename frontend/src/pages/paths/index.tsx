@@ -172,7 +172,7 @@ export default function PathsPage() {
 
   return (
     <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)', maxWidth: 1280, margin: '0 auto' }}>
-      <div style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
+      <div id="paths-list" style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', paddingTop: 60 }}><Spin /></div>
         ) : paths.length === 0 ? (
@@ -217,7 +217,7 @@ export default function PathsPage() {
             );
           })
         )}
-        <Button type="dashed" block icon={<PlusOutlined />}
+        <Button type="dashed" block icon={<PlusOutlined />} id="paths-create-btn"
           onClick={() => { setGenPathId(undefined); setGenOpen(true); }}
           style={{ marginTop: 4, borderRadius: 8 }}>
           AI 定制路线

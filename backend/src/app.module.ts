@@ -18,6 +18,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { VersionsModule } from './versions/versions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { NotesModule } from './notes/notes.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { NotesModule } from './notes/notes.module';
     VersionsModule,
     AnalyticsModule,
     NotesModule,
+    FeedbackModule,
   ],
 })
 export class AppModule {}

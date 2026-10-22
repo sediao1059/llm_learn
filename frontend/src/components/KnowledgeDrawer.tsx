@@ -273,7 +273,7 @@ export default function KnowledgeDrawer({
         }}
       >
         {nodeData ? (
-          <div ref={contentRef} onMouseUp={handleMouseUp} onClick={onContentClick} style={{ userSelect: 'text', paddingBottom: 60 }}>
+          <div ref={contentRef} className="note-content" onMouseUp={handleMouseUp} onClick={onContentClick} style={{ userSelect: 'text', paddingBottom: 60 }}>
             {/* 标签区 */}
             <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {nodeData.layer && <Tag color="blue">{nodeData.layer}</Tag>}

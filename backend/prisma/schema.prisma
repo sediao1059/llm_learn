@@ -186,6 +186,7 @@ model AiNode {
   title        String   @db.VarChar(160)
   category     String   @db.VarChar(60)
   layer        String?  @db.VarChar(40)
+  difficulty   String   @default("未标注") @db.VarChar(10)
   tags         String   @default("[]") @db.VarChar(1000)
   status       String   @default("learned") @db.VarChar(10)
   content      String   @db.MediumText
@@ -401,6 +402,8 @@ model Version {
   version   String   @unique @db.VarChar(20)
   date      String   @db.VarChar(20)
   changes   String   @db.Text
+  // 发布记录幂等键（自动登记机制用：同一台账条目重复启动/多环境不会重复入库；管理页手动建的记录为空）
+  key       String?  @unique @map("release_key") @db.VarChar(64)
   createdAt DateTime @default(now())
 
   @@map("versions")
@@ -420,4 +423,16 @@ model LlmUsage {
   @@index([userId, createdAt])
   @@index([createdAt])
   @@map("llm_usage")
+}
+
+// ========== 用户反馈 ==========
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  contact   String?  @db.VarChar(50) // 可选联系方式
+  createdBy String?  @map("created_by") @db.VarChar(40) // 提交人用户名；游客为空
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([createdAt])
+  @@map("feedbacks")
 }

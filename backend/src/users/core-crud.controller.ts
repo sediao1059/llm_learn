@@ -267,6 +267,7 @@ export class CoreCrudController {
 
     const nodes = aiNodes.map(n => ({
       id: n.id, title: n.title, category: n.category, layer: n.layer,
+      difficulty: n.difficulty || '未标注',
       status: n.status === 'todo' ? 'todo' : 'learned',
       tags: parseArr(n.tags), links: parseArr(n.links).filter((id: string) => knownIds.has(id)),
       content: n.content, createdAt: n.createdAt, createdBy: n.createdBy,

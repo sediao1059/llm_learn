@@ -10,6 +10,7 @@ import JobsTab from './JobsTab';
 import VersionsTab from './VersionsTab';
 import AnalyticsTab from './AnalyticsTab';
 import NotesTab from './NotesTab';
+import FeedbackTab from './FeedbackTab';
 
 export default function AdminPage() {
   return (
@@ -29,6 +30,7 @@ export default function AdminPage() {
             { key: 'versions', label: '版本管理', children: <VersionsTab /> },
             { key: 'analytics', label: '📊 报表统计', children: <AnalyticsTab /> },
             { key: 'notes', label: '笔记管理', children: <NotesTab /> },
+            { key: 'feedback', label: '💬 反馈', children: <FeedbackTab /> },
           ]}
         />
       </Card>

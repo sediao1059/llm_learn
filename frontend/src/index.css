@@ -68,3 +68,12 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+/* 新手引导灯泡：未登录时金色柔和闪烁提醒（登录后停止闪烁，仅保留静态图标） */
+@keyframes guide-blink {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px rgba(250, 173, 20, 0.9)); }
+  50% { opacity: 0.35; filter: drop-shadow(0 0 8px rgba(250, 173, 20, 1)); }
+}
+.guide-bulb-blink {
+  animation: guide-blink 1.6s ease-in-out infinite;
+}
