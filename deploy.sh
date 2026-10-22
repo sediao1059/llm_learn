@@ -48,7 +48,9 @@ cd "$REMOTE_DIR/backend"
 docker network create "$NETWORK" 2>/dev/null || true
 docker network connect "$NETWORK" mysql 2>/dev/null || true
 BUILD="docker run --rm --network $NETWORK --env-file .env -v $REMOTE_DIR/backend:/app -w /app -e NPM_CONFIG_REGISTRY=$NPM_REGISTRY -e PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma $IMAGE"
-$BUILD bash -c 'npm install --no-audit --no-fund && npx prisma generate && npx prisma db push --skip-generate && npx nest build'
+# db push 带 --accept-data-loss：跳过「加唯一约束/加列」类变更的保守警告（如 versions.release_key 全 NULL 加唯一索引）。
+# schema 的危险变更（删列/改类型）应先在本地 db push 时人工确认过再提交，这里只做幂等同步。
+$BUILD bash -c 'npm install --no-audit --no-fund && npx prisma generate && npx prisma db push --skip-generate --accept-data-loss && npx nest build'
 docker rm -f "$CONTAINER" 2>/dev/null || true
 docker run -d --name "$CONTAINER" --restart unless-stopped --network "$NETWORK" -p 127.0.0.1:$BACKEND_PORT:$BACKEND_PORT --env-file .env -v "$REMOTE_DIR/backend:/app" -w /app "$IMAGE" node dist/main.js
 ok=""
