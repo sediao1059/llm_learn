@@ -63,6 +63,30 @@ body {
   border-color: #ffe58f;
 }
 
+/* 专栏聚合节点浮窗内的成员文章行：按序号罗列，hover 高亮 */
+.column-article-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+  transition: background 0.15s, border-color 0.15s;
+}
+.column-article-row:hover {
+  background: #fffbe6;
+  border-color: #ffe58f;
+}
+.column-article-row .idx {
+  color: #d48806;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 18px;
+  text-align: right;
+}
+.column-article-row .title { flex: 1; }
+
 /* 流式生成中的打字光标 */
 @keyframes blink {
   0%, 100% { opacity: 1; }

@@ -72,11 +72,32 @@ export function useKnowledgeBase() {
     })?.filter(Boolean) || [],
     [findNode]);
 
+  /** 专栏文章：本节点是专栏聚合节点（col-）时，links 中的 up- 成员即专栏文章（挂载按入库顺序追加，序号即文章顺序） */
+  const columnArticlesOf = useCallback((node: any): { id: string; title: string }[] => {
+    if (!node || !String(node.id).startsWith('col-')) return [];
+    return (node.links || [])
+      .filter((id: string) => String(id).startsWith('up-'))
+      .map((id: string) => {
+        const n = findNode(id);
+        return n ? { id, title: n.title } : null;
+      })
+      .filter(Boolean) as { id: string; title: string }[];
+  }, [findNode]);
+
+  /** 所属专栏：本节点是专栏成员文章（up-）时，links 中的 col- 节点即其所属专栏 */
+  const collectionOf = useCallback((node: any): { id: string; title: string } | null => {
+    if (!node || !String(node.id).startsWith('up-')) return null;
+    const colId = (node.links || []).find((id: string) => String(id).startsWith('col-'));
+    if (!colId) return null;
+    const col = findNode(colId);
+    return col ? { id: colId, title: col.title } : null;
+  }, [findNode]);
+
   /** 标注学习程度（乐观更新本地状态） */
   const setLevel = useCallback(async (refId: string, level: number) => {
     setProgress(prev => ({ ...prev, [refId]: level }));
     await api.put('/progress', { nodeId: refId, level });
   }, []);
 
-  return { data, aiData, progress, findNode, linkedNodesOf, setLevel, user };
+  return { data, aiData, progress, findNode, linkedNodesOf, columnArticlesOf, collectionOf, setLevel, user };
 }

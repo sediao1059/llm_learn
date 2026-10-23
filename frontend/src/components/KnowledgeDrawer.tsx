@@ -43,6 +43,10 @@ export interface KnowledgeDrawerProps {
   extending?: boolean;
   linkedNodes?: { id: string; title: string }[];
   onOpenLinked?: (refId: string) => void;
+  /** 本节点是专栏聚合节点（col-）时：按入库顺序单列的专栏成员文章 */
+  columnArticles?: { id: string; title: string }[];
+  /** 本节点是专栏成员文章（up-）时：其所属专栏（点击可返回专栏） */
+  belongsToCollection?: { id: string; title: string } | null;
   userRole?: string;
   isLoggedIn?: boolean;
   onAnnotationSaved?: () => void;
@@ -57,6 +61,7 @@ export default function KnowledgeDrawer({
   prevId, nextId, onNavigate,
   routeId, routeTitle, routeSummary, inRoute, onExtendRoute, extending,
   linkedNodes, onOpenLinked,
+  columnArticles, belongsToCollection,
   userRole, isLoggedIn, onAnnotationSaved,
   annotations = [],
 }: KnowledgeDrawerProps) {
@@ -246,6 +251,14 @@ export default function KnowledgeDrawer({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>{nodeData?.title || nodeId}</span>
+            {belongsToCollection && (
+              <Tooltip title={`回到所属专栏《${belongsToCollection.title}》`}>
+                <Button type="link" size="small" style={{ padding: 0 }}
+                  onClick={() => onOpenLinked?.(belongsToCollection.id)}>
+                  返回专栏
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip title="🤖 向 AI 追问：直接针对这篇笔记提问（可多轮，解答可存为整篇注解，在讨论区继续追问/评论）">
               <Button type="text" size="small" icon={<RobotOutlined />}
                 onClick={askAI} />
@@ -276,6 +289,14 @@ export default function KnowledgeDrawer({
           <div ref={contentRef} className="note-content" onMouseUp={handleMouseUp} onClick={onContentClick} style={{ userSelect: 'text', paddingBottom: 60 }}>
             {/* 标签区 */}
             <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {belongsToCollection && (
+                <Tooltip title={`这篇是专栏《${belongsToCollection.title}》里的文章，点击回到专栏`}>
+                  <Tag color="gold" style={{ cursor: onOpenLinked ? 'pointer' : 'default' }}
+                    onClick={() => onOpenLinked?.(belongsToCollection.id)}>
+                    📚 所属专栏：{belongsToCollection.title}
+                  </Tag>
+                </Tooltip>
+              )}
               {nodeData.layer && <Tag color="blue">{nodeData.layer}</Tag>}
               {nodeData.category && <Tag color="geekblue">{nodeData.category}</Tag>}
               {nodeData.difficulty && <Tag color="orange">{nodeData.difficulty}</Tag>}
@@ -301,6 +322,27 @@ export default function KnowledgeDrawer({
 
             {/* Markdown 正文 */}
             <MarkdownContent content={displayContent} />
+
+            {/* 专栏文章：本节点是专栏聚合节点时按序号单列成员文章（不混入下方关联知识点） */}
+            {columnArticles && columnArticles.length > 0 && (
+              <>
+                <Divider>📚 专栏文章（共 {columnArticles.length} 篇，点击打开）</Divider>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {columnArticles.map((a, i) => (
+                    <Tooltip key={a.id} title={`打开专栏文章《${a.title}》`}>
+                      <div
+                        className="column-article-row"
+                        style={{ cursor: onOpenLinked ? 'pointer' : 'default' }}
+                        onClick={() => onOpenLinked?.(a.id)}>
+                        <span className="idx">{i + 1}.</span>
+                        <span className="title">{a.title}</span>
+                        <RightOutlined style={{ color: '#999', fontSize: 12, flexShrink: 0 }} />
+                      </div>
+                    </Tooltip>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* 关联知识点 */}
             {linkedNodes && linkedNodes.length > 0 && (
