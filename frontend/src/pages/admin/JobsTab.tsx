@@ -43,6 +43,6 @@ export default function JobsTab() {
 
   return (
     <Table dataSource={jobs} columns={columns} rowKey="id" loading={loading}
-      pagination={false} />
+      scroll={{ x: 760 }} pagination={false} />
   );
 }

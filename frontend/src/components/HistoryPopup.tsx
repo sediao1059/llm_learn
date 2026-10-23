@@ -6,7 +6,7 @@ import { fmtShort } from '../utils/format';
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
 /** 顶栏「🕘 足迹」：浏览记录弹窗（仅自己可见；点击行原地打开笔记浮窗，不跳转图谱页） */
-export default function HistoryPopup({ onOpenNode }: { onOpenNode: (nodeId: string) => void }) {
+export default function HistoryPopup({ onOpenNode, compact }: { onOpenNode: (nodeId: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ export default function HistoryPopup({ onOpenNode }: { onOpenNode: (nodeId: stri
       onOpenChange={setOpen}
       title="🕘 我的足迹（最近 200 条，仅自己可见）"
       content={
-        <div style={{ width: 380, maxHeight: 440, overflowY: 'auto' }}>
+        <div style={{ width: 'min(380px, calc(100vw - 48px))', maxHeight: 440, overflowY: 'auto' }}>
           <List
             size="small" loading={loading}
             dataSource={rows}
@@ -59,7 +59,7 @@ export default function HistoryPopup({ onOpenNode }: { onOpenNode: (nodeId: stri
       }
     >
       <Tooltip title="我看过的笔记，点击回到那篇">
-        <Button size="small" icon={<HistoryOutlined />}>足迹</Button>
+        <Button size="small" icon={<HistoryOutlined />}>{compact ? null : '足迹'}</Button>
       </Tooltip>
     </Popover>
   );

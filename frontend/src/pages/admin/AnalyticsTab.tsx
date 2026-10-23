@@ -71,14 +71,14 @@ export default function AnalyticsTab() {
 
   return (
     <div style={{ padding: '0 4px' }}>
-      {/* 概览卡片 */}
+      {/* 概览卡片（窄屏自动换行堆叠） */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col span={4}><Card size="small"><Statistic title="总用户" value={ov.totalUsers || 0} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="活跃用户(7天)" value={ov.activeUsers7d || 0} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="知识点" value={(ov.totalNotes || 0) + (ov.totalAiNodes || 0)} suffix={` (${ov.totalAiNodes || 0} AI)`} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="对话总数" value={ov.totalMessages || 0} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="注解" value={ov.totalAnnotations || 0} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="Token 总量" value={ov.totalTokens || 0} valueStyle={{ color: '#faad14' }} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="总用户" value={ov.totalUsers || 0} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="活跃用户(7天)" value={ov.activeUsers7d || 0} valueStyle={{ color: '#52c41a' }} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="知识点" value={(ov.totalNotes || 0) + (ov.totalAiNodes || 0)} suffix={` (${ov.totalAiNodes || 0} AI)`} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="对话总数" value={ov.totalMessages || 0} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="注解" value={ov.totalAnnotations || 0} /></Card></Col>
+        <Col xs={12} sm={8} md={8} lg={4}><Card size="small"><Statistic title="Token 总量" value={ov.totalTokens || 0} valueStyle={{ color: '#faad14' }} /></Card></Col>
       </Row>
 
       {/* 每日活跃度折线图 */}
@@ -88,7 +88,7 @@ export default function AnalyticsTab() {
 
       <Row gutter={16}>
         {/* Top 活跃用户 */}
-        <Col span={12}>
+        <Col xs={24} lg={12}>
           <Card title="🏆 Top 活跃用户" size="small">
             <Table
               dataSource={data.topUsers || []} rowKey="username" size="small"
@@ -106,7 +106,7 @@ export default function AnalyticsTab() {
         </Col>
 
         {/* 知识分类分布 */}
-        <Col span={12}>
+        <Col xs={24} lg={12}>
           <Card title="📊 知识分类分布" size="small">
             <div ref={pieRef} style={{ height: 280 }} />
           </Card>

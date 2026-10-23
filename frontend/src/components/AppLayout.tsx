@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, Tag, Space, Tooltip, message } from 'antd';
+import { Layout, Menu, Button, Tag, Space, Tooltip, message, Drawer, Dropdown } from 'antd';
 import {
   MessageOutlined, BulbOutlined, InboxOutlined, CommentOutlined,
+  MenuOutlined, UserOutlined, SettingOutlined, LogoutOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/auth';
 import { useTour, isTourDone } from '../store/tour';
+import { useResponsive } from '../hooks/useResponsive';
 import LoginModal from './LoginModal';
 import ProfileModal from './ProfileModal';
 import AssistantDrawer from './AssistantDrawer';
@@ -27,6 +29,10 @@ export default function AppLayout() {
   const loc = useLocation();
   const { user, loading, logout, refresh } = useAuth();
   const startTour = useTour((s) => s.start);
+  // 手机 / iPad 竖屏（<1024px）顶栏折叠：左侧导航收进汉堡抽屉、右侧按钮图标化、用户区收进下拉
+  const { isMobile, isPad } = useResponsive();
+  const compact = isMobile || isPad;
+  const [navOpen, setNavOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -81,6 +87,12 @@ export default function AppLayout() {
     nav(key);
   };
 
+  /** 汉堡导航抽屉内的菜单点击：先收起抽屉再走原导航逻辑（含登录拦截） */
+  const onDrawerNavClick = (e: { key: string }) => {
+    setNavOpen(false);
+    onNavClick(e);
+  };
+
   const onLoginSuccess = () => {
     setLoginOpen(false);
     if (pendingNav.current) {
@@ -106,6 +118,14 @@ export default function AppLayout() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: '#fff', borderBottom: '1px solid #e5e6eb', padding: '0 20px', height: 56,
       }}>
+        {compact ? (
+          <div id="app-nav-menu" style={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="导航菜单">
+              <Button size="small" type="text" aria-label="导航菜单"
+                icon={<MenuOutlined style={{ fontSize: 16 }} />} onClick={() => setNavOpen(true)} />
+            </Tooltip>
+          </div>
+        ) : (
         <div id="app-nav-menu" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Menu
             mode="horizontal" selectedKeys={[loc.pathname]} items={items}
@@ -148,18 +168,19 @@ export default function AppLayout() {
             </Tooltip>
           )}
         </div>
-        <Space>
+        )}
+        <Space size={compact ? 4 : 8}>
           <Tooltip title="全局 AI 助手：随时提问，满意可沉淀为知识点">
             <Button size="small" id="app-assistant-btn" type={user ? 'primary' : 'default'} ghost={!!user}
               icon={<MessageOutlined />}
               onClick={() => (user ? setAssistantOpen(true) : requireLogin())}>
-              助手
+              {compact ? null : '助手'}
             </Button>
           </Tooltip>
           <Tooltip title="意见或 bug 反馈：登录前后都能提，开发者会在后台看到">
             <Button size="small" id="app-feedback-btn" icon={<CommentOutlined />}
               onClick={() => setFeedbackOpen(true)}>
-              反馈
+              {compact ? null : '反馈'}
             </Button>
           </Tooltip>
           <Tooltip title="新手引导 · 随时重看">
@@ -172,39 +193,88 @@ export default function AppLayout() {
           </Tooltip>
           {user && (
             <>
-              <HistoryPopup onOpenNode={setReadNodeId} />
-              <FavoritesPopup onOpenNode={setReadNodeId} />
+              <HistoryPopup onOpenNode={setReadNodeId} compact={compact} />
+              <FavoritesPopup onOpenNode={setReadNodeId} compact={compact} />
               <Tooltip title="我划词沉淀过的全部注解">
                 <Button size="small" icon={<BulbOutlined />}
-                  onClick={() => setMyAnnoOpen(true)}>注解</Button>
+                  onClick={() => setMyAnnoOpen(true)}>{compact ? null : '注解'}</Button>
               </Tooltip>
               {user.role !== 'admin' && (
                 <Tooltip title="我提交的知识点沉淀进度">
                   <Button size="small" icon={<InboxOutlined />}
-                    onClick={() => setDepositOpen(true)}>沉淀</Button>
+                    onClick={() => setDepositOpen(true)}>{compact ? null : '沉淀'}</Button>
                 </Tooltip>
               )}
             </>
           )}
-          <Tooltip title="联系开发者">
-            <a href="mailto:sediao666@qq.com" style={{ fontSize: 12, color: '#86909c' }}>
-              ✉ sediao666@qq.com
-            </a>
-          </Tooltip>
+          {!compact && (
+            <Tooltip title="联系开发者">
+              <a href="mailto:sediao666@qq.com" style={{ fontSize: 12, color: '#86909c' }}>
+                ✉ sediao666@qq.com
+              </a>
+            </Tooltip>
+          )}
           {user ? (
-            <>
-              <span style={{ fontSize: 13 }}>
-                👤 {user.nickname || user.username}
-                {user.role === 'admin' && <Tag color="success" style={{ marginLeft: 4 }}>管理员</Tag>}
-              </span>
-              <Button size="small" onClick={() => setProfileOpen(true)}>⚙ 我的</Button>
-              <Button size="small" onClick={() => logout()}>退出</Button>
-            </>
+            compact ? (
+              <Dropdown
+                menu={{
+                  items: [
+                    { key: 'profile', icon: <SettingOutlined />, label: '⚙ 我的（个人中心）' },
+                    ...(user.role === 'admin' ? [{ key: 'admin', label: '🛡 管理' }] : []),
+                    { type: 'divider' as const },
+                    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
+                  ],
+                  onClick: ({ key }: { key: string }) => {
+                    if (key === 'profile') setProfileOpen(true);
+                    else if (key === 'admin') nav('/admin');
+                    else if (key === 'logout') logout();
+                  },
+                }}
+              >
+                <Button size="small" icon={<UserOutlined />}>
+                  {(user.nickname || user.username).slice(0, 6)}
+                </Button>
+              </Dropdown>
+            ) : (
+              <>
+                <span style={{ fontSize: 13 }}>
+                  👤 {user.nickname || user.username}
+                  {user.role === 'admin' && <Tag color="success" style={{ marginLeft: 4 }}>管理员</Tag>}
+                </span>
+                <Button size="small" onClick={() => setProfileOpen(true)}>⚙ 我的</Button>
+                <Button size="small" onClick={() => logout()}>退出</Button>
+              </>
+            )
           ) : (
-            <Button size="small" id="app-login-btn" onClick={() => setLoginOpen(true)}>登录 / 注册</Button>
+            <Button size="small" id="app-login-btn" onClick={() => setLoginOpen(true)}>
+              {compact ? '登录' : '登录 / 注册'}
+            </Button>
           )}
         </Space>
       </Header>
+
+      {/* 手机 / iPad 竖屏：导航收进左侧汉堡抽屉（版本徽章与邮箱也搬到这里） */}
+      <Drawer
+        title="🧠 LLM 学习知识图谱" placement="left" width="min(280px, 80vw)"
+        open={navOpen} onClose={() => setNavOpen(false)}
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
+      >
+        <Menu
+          mode="vertical" selectedKeys={[loc.pathname]} items={items}
+          onClick={onDrawerNavClick} style={{ borderInlineEnd: 'none', flex: 1, paddingTop: 4 }}
+        />
+        <div style={{ borderTop: '1px solid #f0f0f0', padding: '10px 16px' }}>
+          {verList.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <Tag color="blue" style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px', borderRadius: 4, fontWeight: 600 }}>
+                v{verList[0].version}
+              </Tag>
+              {verList[0].date && <span style={{ fontSize: 12, color: '#86909c' }}>发布于 {verList[0].date}</span>}
+            </div>
+          )}
+          <a href="mailto:sediao666@qq.com" style={{ fontSize: 12, color: '#86909c' }}>✉ sediao666@qq.com</a>
+        </div>
+      </Drawer>
       <Content><Outlet /></Content>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={onLoginSuccess} />

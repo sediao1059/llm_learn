@@ -126,7 +126,7 @@ export default function UsersTab() {
       </p>
       <Table
         dataSource={users} columns={columns} rowKey="id"
-        loading={loading}
+        loading={loading} scroll={{ x: 1200 }}
         pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 个用户`, showSizeChanger: false }}
       />
       <Drawer

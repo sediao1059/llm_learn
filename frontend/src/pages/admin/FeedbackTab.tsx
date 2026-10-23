@@ -40,6 +40,6 @@ export default function FeedbackTab() {
 
   return (
     <Table dataSource={list} columns={columns} rowKey="id" loading={loading} size="small"
-      pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条反馈` }} />
+      scroll={{ x: 640 }} pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条反馈` }} />
   );
 }

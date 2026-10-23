@@ -7,6 +7,7 @@ import AnnotationFloatButton from '../../components/AnnotationFloatButton';
 import AnnotationReadModal from '../../components/AnnotationReadModal';
 import AnnotationEntries from '../../components/AnnotationEntries';
 import useSelectionAnno from '../../hooks/useSelectionAnno';
+import { useResponsive } from '../../hooks/useResponsive';
 import { applyAnnoMarks, findAnnoByClickTarget } from '../../utils/annotate';
 import { useAuth } from '../../store/auth';
 import { showQueuedNotice, hideQueueNotice } from '../../utils/llmQueueNotice';
@@ -35,6 +36,7 @@ export default function TopicContentDrawer({
   open, onClose, pathId, addr, topic, stageTitle, onGenerated,
 }: Props) {
   const { user } = useAuth();
+  const { isMobile } = useResponsive(); // 手机端抽屉全屏铺满
   const [content, setContent] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState('');
@@ -178,7 +180,7 @@ export default function TopicContentDrawer({
   return (
     <>
       <Drawer
-        open={open} onClose={onClose} width={640}
+        open={open} onClose={onClose} width={isMobile ? '100%' : 640}
         title={
           <span style={{ fontSize: 15 }}>
             ✨ {topic?.title || '学习内容'}

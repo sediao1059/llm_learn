@@ -75,7 +75,7 @@ export default function PathsTab() {
           }}>🔗 导入官方路线</Button>
       </div>
       <Table dataSource={paths} columns={columns} rowKey="id" loading={loading}
-        pagination={{ pageSize: 10 }} />
+        scroll={{ x: 760 }} pagination={{ pageSize: 10 }} />
 
       <Drawer open={!!viewPath} onClose={() => setViewPath(null)}
         title={`🗺 ${viewPath?.title || ''}`} width={520}>

@@ -3,9 +3,10 @@ import {
   Drawer, Button, Select, Input, Tag, Modal, Rate, Spin, message, Popconfirm,
 } from 'antd';
 import {
-  PlusOutlined, SendOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, RobotOutlined,
+  PlusOutlined, SendOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, RobotOutlined, MenuOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/auth';
+import { useResponsive } from '../hooks/useResponsive';
 import MarkdownContent from './MarkdownContent';
 import { showQueuedNotice, hideQueueNotice, trackLlmCall } from '../utils/llmQueueNotice';
 
@@ -68,6 +69,9 @@ async function jsonFetch(path: string, method: string, body?: any) {
 export default function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  // 手机端：抽屉全屏、会话列表收进嵌套抽屉（桌面固定左栏 190px 不变）
+  const { isMobile } = useResponsive();
+  const [sessionsOpen, setSessionsOpen] = useState(false);
 
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
@@ -359,10 +363,59 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
 
   const d = preview?.decision;
 
+  // 会话列表：桌面固定在抽屉左侧 190px；手机由聊天区顶部「☰ 会话」按钮唤出的嵌套抽屉承载（同一份 JSX 复用）
+  const sessionList = (
+    <div style={{
+      height: '100%', display: 'flex', flexDirection: 'column', background: '#fafbfc',
+    }}>
+      <div style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
+        <Button size="small" block icon={<PlusOutlined />} onClick={newChat}>新会话</Button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {chats.length ? chats.map(c => (
+          <div
+            key={c.id}
+            onClick={() => { if (!streaming) { selectChat(c.id); setSessionsOpen(false); } }}
+            style={{
+              padding: '8px 10px', cursor: 'pointer',
+              background: c.id === currentChatId ? '#e8f1ff' : 'transparent',
+              borderBottom: '1px solid #f5f5f5',
+            }}
+            className="ai-session-item"
+          >
+            <div style={{
+              fontSize: 13, fontWeight: c.id === currentChatId ? 600 : 400,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }} title={c.title}>{c.title}</div>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              fontSize: 11, color: '#999', marginTop: 2,
+            }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {String(c.updatedAt || '').slice(5, 16).replace('T', ' ')}
+              </span>
+              <span className="ai-session-ops" style={{ flexShrink: 0 }}>
+                <EditOutlined style={{ marginRight: 6 }} onClick={e => {
+                  e.stopPropagation();
+                  setRenaming(c); setRenameVal(c.title);
+                }} />
+                <Popconfirm title={`删除会话「${c.title}」？全部消息一并删除。`} onConfirm={() => doDelete(c)}>
+                  <DeleteOutlined onClick={e => e.stopPropagation()} />
+                </Popconfirm>
+              </span>
+            </div>
+          </div>
+        )) : (
+          <p style={{ padding: '6px 10px', fontSize: 12, color: '#999' }}>还没有会话，发首个提问或点「新会话」</p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <Drawer
-        open={open} onClose={onClose} width={640}
+        open={open} onClose={onClose} width={isMobile ? '100%' : 640}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>💬 AI 助手</span>
@@ -372,53 +425,10 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
         styles={{ body: { padding: 0 } }}
       >
         <div style={{ display: 'flex', height: '100%' }}>
-          {/* 左：会话列表 */}
-          <div style={{
-            width: 190, borderRight: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column',
-            background: '#fafbfc',
-          }}>
-            <div style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-              <Button size="small" block icon={<PlusOutlined />} onClick={newChat}>新会话</Button>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {chats.length ? chats.map(c => (
-                <div
-                  key={c.id}
-                  onClick={() => !streaming && selectChat(c.id)}
-                  style={{
-                    padding: '8px 10px', cursor: 'pointer',
-                    background: c.id === currentChatId ? '#e8f1ff' : 'transparent',
-                    borderBottom: '1px solid #f5f5f5',
-                  }}
-                  className="ai-session-item"
-                >
-                  <div style={{
-                    fontSize: 13, fontWeight: c.id === currentChatId ? 600 : 400,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }} title={c.title}>{c.title}</div>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    fontSize: 11, color: '#999', marginTop: 2,
-                  }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {String(c.updatedAt || '').slice(5, 16).replace('T', ' ')}
-                    </span>
-                    <span className="ai-session-ops" style={{ flexShrink: 0 }}>
-                      <EditOutlined style={{ marginRight: 6 }} onClick={e => {
-                        e.stopPropagation();
-                        setRenaming(c); setRenameVal(c.title);
-                      }} />
-                      <Popconfirm title={`删除会话「${c.title}」？全部消息一并删除。`} onConfirm={() => doDelete(c)}>
-                        <DeleteOutlined onClick={e => e.stopPropagation()} />
-                      </Popconfirm>
-                    </span>
-                  </div>
-                </div>
-              )) : (
-                <p style={{ padding: '6px 10px', fontSize: 12, color: '#999' }}>还没有会话，发首个提问或点「新会话」</p>
-              )}
-            </div>
-          </div>
+          {/* 左：会话列表（桌面） */}
+          {!isMobile && (
+            <div style={{ width: 190, borderRight: '1px solid #f0f0f0' }}>{sessionList}</div>
+          )}
 
           {/* 右：聊天区 */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -426,6 +436,11 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
               padding: '6px 12px', borderBottom: '1px solid #f0f0f0',
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
+              {isMobile && (
+                <Button size="small" icon={<MenuOutlined />} onClick={() => setSessionsOpen(true)}>
+                  会话
+                </Button>
+              )}
               <span style={{ fontSize: 12, color: '#666' }}>对话模型</span>
               <Select
                 size="small" style={{ minWidth: 170 }}
@@ -461,6 +476,17 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
           </div>
         </div>
       </Drawer>
+
+      {/* 手机：会话列表嵌套抽屉（选会话后自动收起） */}
+      {isMobile && (
+        <Drawer
+          title="我的会话" placement="left" width="min(280px, 80vw)"
+          open={sessionsOpen} onClose={() => setSessionsOpen(false)}
+          styles={{ body: { padding: 0 } }}
+        >
+          {sessionList}
+        </Drawer>
+      )}
 
       {/* 会话重命名 */}
       <Modal

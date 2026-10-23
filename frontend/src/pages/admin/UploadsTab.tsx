@@ -108,7 +108,7 @@ export default function UploadsTab() {
         <Radio.Button value="extract_failed">失败</Radio.Button>
       </Radio.Group>
       <Table dataSource={uploads} columns={columns} rowKey="id" loading={loading}
-        pagination={{ pageSize: 8 }} />
+        scroll={{ x: 900 }} pagination={{ pageSize: 8 }} />
 
       <Drawer
         open={!!viewUpload} onClose={() => setViewUpload(null)}

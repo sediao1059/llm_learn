@@ -136,7 +136,7 @@ export default function GenerateModal({
       title="🤖 AI 定制学习路线" width={680} footer={null}
       maskClosable={!generating} keyboard={!generating}
     >
-      <div style={{ height: 420, overflowY: 'auto', marginBottom: 12, padding: '0 4px' }}>
+      <div style={{ height: 'min(420px, 52vh)', overflowY: 'auto', marginBottom: 12, padding: '0 4px' }}>
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', paddingTop: 100, color: '#8c8c8c' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🗺</div>

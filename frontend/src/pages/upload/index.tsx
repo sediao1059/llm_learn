@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Card, Tabs, Form, Input, Button, Tag, Statistic, message, Alert, Tooltip } from 'antd';
 import { api } from '../../api/client';
 import UploadItemReadDrawer from '../../components/UploadItemReadDrawer';
+import { useResponsive } from '../../hooks/useResponsive';
 
 interface Upload {
   id: number; kind: string; url: string; title: string; note: string;
@@ -10,6 +11,8 @@ interface Upload {
 }
 
 export default function UploadPage() {
+  // 手机端改单列：「我的贡献」卡片折到表单下方通栏（桌面右栏 280px 不变）
+  const { isMobile } = useResponsive();
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [contrib, setContrib] = useState({ total: 0, days: [] as any[] });
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +62,7 @@ export default function UploadPage() {
   const activeDays = contrib.days.filter((d: any) => d.count > 0).length;
 
   return (
-    <div style={{ display: 'flex', gap: 16, padding: 16, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, padding: 16, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ flex: 1 }}>
         <Card>
           <Tabs items={[
@@ -114,7 +117,7 @@ export default function UploadPage() {
         </Card>
       </div>
 
-      <Card title="我的贡献" style={{ width: 280, flexShrink: 0 }}>
+      <Card title="我的贡献" style={isMobile ? { width: '100%' } : { width: 280, flexShrink: 0 }}>
         <Statistic title="累计贡献分" value={contrib.total} />
         <p style={{ color: '#909399', fontSize: 12, marginTop: 8 }}>
           近 90 天活跃 {activeDays} 天<br />

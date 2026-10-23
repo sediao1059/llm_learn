@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, Progress, Tag, Button, Empty, Spin, message, Popconfirm } from 'antd';
+import { Card, Progress, Tag, Button, Empty, Spin, message, Popconfirm, Select } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import TreeView from './TreeView';
 import GenerateModal from './GenerateModal';
 import TopicContentDrawer from './TopicContentDrawer';
 import KnowledgeDrawer from '../../components/KnowledgeDrawer';
 import { useAuth } from '../../store/auth';
+import { useResponsive } from '../../hooks/useResponsive';
 import { trackLlmCall } from '../../utils/llmQueueNotice';
 
 const headers = () => ({
@@ -29,6 +30,8 @@ function findTopic(tree: any, addr: number[]): any | null {
 
 export default function PathsPage() {
   const { user } = useAuth();
+  // 手机端改单列：左侧路线列表收成顶部「选择路线」下拉 + AI 定制按钮（桌面左右双栏不变）
+  const { isMobile } = useResponsive();
   const [paths, setPaths] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [refTitles, setRefTitles] = useState<Record<string, string>>({});
@@ -171,7 +174,37 @@ export default function PathsPage() {
   const topicStageTitle = topicAddr && selected ? selected.tree?.stages?.[topicAddr[0]]?.title : undefined;
 
   return (
-    <div style={{ display: 'flex', gap: 16, padding: 16, height: 'calc(100vh - 56px)', maxWidth: 1280, margin: '0 auto' }}>
+    <div className="page-fill" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, padding: 16, maxWidth: 1280, margin: '0 auto' }}>
+      {/* 手机：路线选择器（替代左侧卡片列表；#paths-list / #paths-create-btn 引导锚点保留） */}
+      {isMobile && (
+        <div id="paths-list" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <Select
+            style={{ flex: 1, minWidth: 0 }}
+            value={selectedId ?? undefined}
+            onChange={(id: number) => { setSelectedId(id); setTopicAddr(null); }}
+            placeholder={loading ? '加载路线中…' : '选择学习路线'}
+            loading={loading}
+            options={paths.map(p => ({
+              value: p.id,
+              label: `${p.isOfficial ? '⭐ ' : ''}${p.title}（已学 ${routePct(p)}%）`,
+            }))}
+          />
+          <Button icon={<PlusOutlined />} id="paths-create-btn"
+            onClick={() => { setGenPathId(undefined); setGenOpen(true); }}>
+            AI 定制
+          </Button>
+          {selected && canDelete(selected) && (
+            <Popconfirm
+              title={`删除路线「${selected.title}」？`}
+              description="路线与已生成内容将一并删除，不可恢复"
+              okText="删除" cancelText="取消" okButtonProps={{ danger: true }}
+              onConfirm={() => doDelete(selected)}>
+              <Button danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
+        </div>
+      )}
+      {!isMobile && (
       <div id="paths-list" style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', paddingTop: 60 }}><Spin /></div>
@@ -223,8 +256,9 @@ export default function PathsPage() {
           AI 定制路线
         </Button>
       </div>
+      )}
 
-      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', paddingRight: 4 }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}>
         {selected ? (
           <TreeView
             path={selected}
@@ -239,7 +273,7 @@ export default function PathsPage() {
           />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <Empty description="从左侧选择一条路线开始学习" />
+            <Empty description={isMobile ? '在上方选择一条路线开始学习' : '从左侧选择一条路线开始学习'} />
           </div>
         )}
       </div>

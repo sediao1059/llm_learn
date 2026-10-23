@@ -100,7 +100,7 @@ export default function VersionsTab() {
         </Button>
       </div>
       <Table dataSource={versions} columns={columns} rowKey="id" loading={loading} size="small"
-        pagination={{ pageSize: 8, showTotal: (t) => `共 ${t} 个版本` }} />
+        scroll={{ x: 700 }} pagination={{ pageSize: 8, showTotal: (t) => `共 ${t} 个版本` }} />
 
       <Modal
         open={modalOpen} onCancel={() => setModalOpen(false)}

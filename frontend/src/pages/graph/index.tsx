@@ -5,6 +5,7 @@ import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import { api } from '../../api/client';
 import { useKnowledgeBase } from '../../hooks/useKnowledgeBase';
+import { useResponsive } from '../../hooks/useResponsive';
 import NodeReadDrawer from '../../components/NodeReadDrawer';
 
 // 难度筛选项（AI 沉淀节点无难度字段，统一归「未标注」）
@@ -24,6 +25,7 @@ const baseNodeSize = (deg: number) => 30 + Math.min(deg * 7, 30);
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+  const { isMobile } = useResponsive(); // 手机端：筛选面板纵向堆叠、起点面板贴边
   const { data, aiData, user } = useKnowledgeBase();
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -212,6 +214,8 @@ export default function GraphPage() {
     // 空白处拖拽平移（全画布生效）：按下未命中任何元素（e.target 为空）时开始平移，
     // 逐帧把位移加到 graph series 的画布组上（与 echarts 原生 updateViewOnPan 同路径），
     // 并派发 graphRoam action 同步 center/zoom，保证后续 setOption 重渲染不丢平移量。
+    // 触屏同样走这三个 handler：zrender 会把 touchstart/move/end 合成为 mousedown/move/up 派发，
+    // 画布上的 touch-action: none 让浏览器不抢手势去滚动页面。
     // _chartsViews 是 echarts 实例上的半私有字段，取不到时退化为只派发 action。
     const zr = chart.current.getZr();
     let panning = false;
@@ -225,6 +229,9 @@ export default function GraphPage() {
     });
     zr.on('mousemove', (e: any) => {
       if (!panning || !chart.current) return;
+      // 双指捏合期间不平移（zrender 会把 touch 合成为 mouse 事件派发到这里），
+      // 缩放交给 echarts RoamController 的原生 pinch 处理（roam: 'scale' 已启用）
+      if (e.gestureEvent === 'pinch') { panning = false; return; }
       const dx = e.offsetX - lastX;
       const dy = e.offsetY - lastY;
       lastX = e.offsetX;
@@ -338,7 +345,7 @@ export default function GraphPage() {
             '<br/><span style="color:#1677ff;font-size:11px">点击查看笔记</span>';
         },
       },
-      legend: { data: merged.categories, bottom: 10, selected: legendSelected },
+      legend: { data: merged.categories, bottom: 10, selected: legendSelected, type: 'scroll' },
       series: [{
         // roam 只保留滚轮缩放；拖拽平移由下方自实现（echarts 原生平移仅对节点团包围盒内生效，
         // 刚打开时节点聚在屏幕中央，画布边缘空白处按住拖不动）
@@ -364,8 +371,9 @@ export default function GraphPage() {
   }, [selected]);
 
   return (
-    <div style={{ display: 'flex', position: 'relative', height: 'calc(100vh - 56px)' }}>
-      <div id="graph-canvas" ref={chartRef} style={{ flex: 1, minWidth: 0, background: '#fff' }} />
+    <div className="page-fill" style={{ display: 'flex', position: 'relative' }}>
+      <div id="graph-canvas" ref={chartRef}
+        style={{ flex: 1, minWidth: 0, background: '#fff', touchAction: 'none' }} />
 
       {/* 筛选浮条：默认折叠收起，按钮上徽标显示生效的筛选条件数；容器不拦截图谱拖拽 */}
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, display: 'flex', alignItems: 'flex-start', gap: 8, maxWidth: 'calc(100% - 24px)', pointerEvents: 'none' }}>
@@ -374,7 +382,7 @@ export default function GraphPage() {
             trigger="click" placement="bottomLeft"
             title="🌱 图谱起点（从哪开始看）"
             content={
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 320 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: isMobile ? 'calc(100vw - 48px)' : 320 }}>
                 <div style={{ fontSize: 12, color: '#8c8c8c' }}>
                   只显示「从起点出发、指定层数以内」的知识点（顺着连线数几步）。选择会自动保存，换设备登录也在。
                 </div>
@@ -449,7 +457,7 @@ export default function GraphPage() {
               placeholder="搜标题、摘要或标签"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              style={{ width: 200 }}
+              style={{ width: isMobile ? '100%' : 200 }}
             />
             <Tooltip title="可多选：笔记带其中任意一个标签就显示">
               <Select
@@ -458,7 +466,7 @@ export default function GraphPage() {
                 value={selTags}
                 onChange={setSelTags}
                 options={(data?.allTags || []).map((t: any) => ({ value: t.tag, label: `${t.tag}（${t.count}）` }))}
-                style={{ minWidth: 220, maxWidth: 360 }}
+                style={isMobile ? { width: '100%' } : { minWidth: 220, maxWidth: 360 }}
               />
             </Tooltip>
             <Tooltip title="入门=新手也能懂；进阶=需要一些基础；深入=老手进阶用；未标注=还没标难度的笔记和 ✨ AI 沉淀">
@@ -468,7 +476,7 @@ export default function GraphPage() {
                 value={selDiffs}
                 onChange={setSelDiffs}
                 options={DIFFICULTY_OPTIONS}
-                style={{ minWidth: 170 }}
+                style={isMobile ? { width: '100%' } : { minWidth: 170 }}
               />
             </Tooltip>
             <Tooltip title="去掉全部筛选条件，看回所有笔记">
@@ -496,7 +504,7 @@ export default function GraphPage() {
       {/* 笔记浮窗（数据查找/注解/学习程度封装在 NodeReadDrawer，与知识库页共用） */}
       <NodeReadDrawer open={!!selected} onClose={() => setSelected(null)} nodeId={selected} />
 
-      {loading && <div style={{ position: 'absolute', top: '50%', left: '50%' }}><Spin size="large" /></div>}
+      {loading && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><Spin size="large" /></div>}
     </div>
   );
 }

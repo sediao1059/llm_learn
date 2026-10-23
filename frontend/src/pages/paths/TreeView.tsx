@@ -68,7 +68,7 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
   return (
     <div>
       <Card size="small" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap', rowGap: 4 }}>
           <h3 style={{ margin: 0, fontSize: 17 }}>{tree.title}</h3>
           {path.isOfficial && <Tag color="warning">⭐ 官方</Tag>}
           <Button type="text" size="small" icon={<EditOutlined />}
@@ -83,7 +83,7 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
           </div>
         </div>
         {tree.summary && <p style={{ color: '#8c8c8c', fontSize: 13, margin: 0 }}>{tree.summary}</p>}
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button size="small" icon={<CheckOutlined />}
             onClick={() => { onBatchLevel(allRefIds, 1); message.success('已全部标记为「了解」'); }}>
             全部标记已学

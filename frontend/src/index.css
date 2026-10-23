@@ -3,6 +3,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   background: #f6f6f6;
   color: #1a1a1a;
+  /* 手机端关掉下拉整页回弹（图谱画布自己接管手势，避免平移/捏合被浏览器抢走） */
+  overscroll-behavior-y: none;
 }
 #root { min-height: 100vh; }
 
@@ -100,6 +102,17 @@ body {
 }
 .row-hover:hover {
   background: #f0f5ff;
+}
+
+/* 整页填充高度（图谱页 / 学习路线页）：顶栏 56px 之外的剩余高度。
+   移动端 Safari/Chrome 地址栏会动态伸缩，100vh 按最大视口算导致底部被裁，用 dvh 修正 */
+.page-fill {
+  height: calc(100vh - 56px);
+}
+@supports (height: 100dvh) {
+  .page-fill {
+    height: calc(100dvh - 56px);
+  }
 }
 
 /* 新手引导灯泡：未登录时金色柔和闪烁提醒（登录后停止闪烁，仅保留静态图标） */

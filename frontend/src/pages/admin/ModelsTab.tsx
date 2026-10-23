@@ -166,7 +166,7 @@ export default function ModelsTab() {
       </div>
       <Table
         dataSource={models} columns={columns} rowKey="id"
-        loading={loading} pagination={false}
+        loading={loading} pagination={false} scroll={{ x: 1000 }}
       />
 
       <Drawer

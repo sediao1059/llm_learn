@@ -231,6 +231,7 @@ export default function LibraryPage() {
           size="middle"
           columns={columns}
           dataSource={rows}
+          scroll={{ x: 860 }}
           onRow={(n) => ({ onClick: () => setSelected(n.id), style: { cursor: 'pointer' } })}
           pagination={{ pageSize: 20, showSizeChanger: false,
             showTotal: (t) => hasFilter ? `筛出 ${t} 篇 / 共 ${allRows.length} 篇` : `共 ${t} 篇` }}

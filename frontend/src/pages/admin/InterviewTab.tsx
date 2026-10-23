@@ -92,7 +92,7 @@ export default function InterviewTab() {
       </div>
       {generating && <Alert type="info" message="⏳ 正在后台生成，本页自动刷新进度…" style={{ marginBottom: 12 }} closable />}
       <Table dataSource={items} columns={columns} rowKey="nodeId" loading={loading}
-        pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 篇笔记` }} />
+        scroll={{ x: 800 }} pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 篇笔记` }} />
 
       <Drawer
         open={!!viewItem} onClose={() => setViewItem(null)}

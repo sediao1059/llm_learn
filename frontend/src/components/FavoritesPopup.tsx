@@ -6,7 +6,7 @@ import { fmtShort } from '../utils/format';
 const TOKEN = () => localStorage.getItem('llm_learn_token');
 
 /** 顶栏「⭐ 收藏」：我的收藏弹窗（点击整行原地打开笔记浮窗、不跳转图谱页；行尾 ⭐ 取消收藏） */
-export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: string) => void }) {
+export default function FavoritesPopup({ onOpenNode, compact }: { onOpenNode: (nodeId: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: st
       onOpenChange={setOpen}
       title="⭐ 我的收藏（仅自己可见）"
       content={
-        <div style={{ width: 380, maxHeight: 440, overflowY: 'auto' }}>
+        <div style={{ width: 'min(380px, calc(100vw - 48px))', maxHeight: 440, overflowY: 'auto' }}>
           <List
             size="small" loading={loading}
             dataSource={rows}
@@ -74,7 +74,7 @@ export default function FavoritesPopup({ onOpenNode }: { onOpenNode: (nodeId: st
       }
     >
       <Tooltip title="我收藏的笔记，点击直接打开">
-        <Button size="small" icon={<StarOutlined />}>收藏</Button>
+        <Button size="small" icon={<StarOutlined />}>{compact ? null : '收藏'}</Button>
       </Tooltip>
     </Popover>
   );

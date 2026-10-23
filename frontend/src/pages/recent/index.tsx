@@ -98,6 +98,7 @@ export default function RecentPage() {
           size="middle"
           columns={columns}
           dataSource={rows}
+          scroll={{ x: 620 }}
           onRow={n => ({ onClick: () => setSelected(n.id), style: { cursor: 'pointer' } })}
           pagination={{ pageSize: 20, showSizeChanger: false, showTotal: t => `共 ${t} 条动态` }}
           locale={{ emptyText: filter === 'ai' ? '暂无 AI 沉淀知识' : '暂无更新记录' }}

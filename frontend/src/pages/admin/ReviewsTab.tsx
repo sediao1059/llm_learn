@@ -120,7 +120,7 @@ export default function ReviewsTab() {
 
       <Card title="知识沉淀" style={{ marginBottom: 16 }}>
         <Table dataSource={subs} columns={subColumns} rowKey="id" loading={loading}
-          pagination={{ pageSize: 5 }} />
+          scroll={{ x: 800 }} pagination={{ pageSize: 5 }} />
       </Card>
 
       <Card title={`划词注解（${annos.length}）`}>

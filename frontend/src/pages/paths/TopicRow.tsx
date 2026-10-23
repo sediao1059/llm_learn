@@ -1,4 +1,5 @@
 import { Tag, Popover, Tooltip } from 'antd';
+import { useResponsive } from '../../hooks/useResponsive';
 
 const LEVELS = [
   { v: 0, name: '未学习', icon: '○', color: '#d9d9d9' },
@@ -32,6 +33,8 @@ export default function TopicRow({
   topic, level, refTitle, addr, onLevelChange, onArticleOpen, onOpenTopic, depth = 0,
 }: Props) {
   const current = LEVELS[level] || LEVELS[0];
+  // 手机端嵌套缩进减半（24px/层 在 375px 宽下 3 层就吃掉 72px）
+  const { isMobile } = useResponsive();
 
   const popoverContent = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -60,7 +63,7 @@ export default function TopicRow({
   const clickable = topic.refId ? !!onArticleOpen : !!onOpenTopic;
 
   return (
-    <div style={{ paddingLeft: depth * 24 }}>
+    <div style={{ paddingLeft: depth * (isMobile ? 14 : 24) }}>
       <div
         style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',

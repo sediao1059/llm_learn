@@ -206,7 +206,7 @@ export default function NotesTab() {
       </div>
       <Table
         dataSource={notes} columns={columns} rowKey="id"
-        loading={loading} pagination={{ pageSize: 10, showSizeChanger: false }}
+        loading={loading} pagination={{ pageSize: 10, showSizeChanger: false }} scroll={{ x: 1200 }}
       />
 
       <Drawer

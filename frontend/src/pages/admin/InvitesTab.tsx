@@ -62,7 +62,7 @@ export default function InvitesTab() {
         </span>
       </div>
       <Table dataSource={invites} columns={columns} rowKey="id" loading={loading}
-        pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }} />
+        scroll={{ x: 640 }} pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }} />
       <Modal open={open} onCancel={() => setOpen(false)} title="新建邀请码" width={380}
         onOk={async () => {
           const v = await form.validateFields();

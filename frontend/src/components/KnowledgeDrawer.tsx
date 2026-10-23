@@ -16,6 +16,7 @@ import AnnotationReadModal from './AnnotationReadModal';
 import AnnotationEntries from './AnnotationEntries';
 import AnnotationListModal from './AnnotationListModal';
 import useSelectionAnno from '../hooks/useSelectionAnno';
+import { useResponsive } from '../hooks/useResponsive';
 import { applyAnnoMarks, findAnnoByClickTarget } from '../utils/annotate';
 
 const LEVELS = [
@@ -67,6 +68,8 @@ export default function KnowledgeDrawer({
 }: KnowledgeDrawerProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const current = LEVELS[level] || LEVELS[0];
+  // 手机端抽屉全屏铺满（桌面保持 500px 靠右）
+  const { isMobile } = useResponsive();
 
   // 划词注解（选区检测 + 浮动按钮位置由共享 hook 提供）
   const { anchorText, selectionPos, setSelectionPos, handleMouseUp } = useSelectionAnno(contentRef);
@@ -247,7 +250,7 @@ export default function KnowledgeDrawer({
     <>
       <Drawer
         open={open} onClose={onClose}
-        width={500}
+        width={isMobile ? '100%' : 500}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>{nodeData?.title || nodeId}</span>
@@ -527,12 +530,12 @@ export default function KnowledgeDrawer({
         </div>
       </Modal>
 
-      {/* 个人笔记 FloatButton */}
+      {/* 个人笔记 FloatButton：桌面贴在抽屉左侧（right:520）；手机抽屉全屏，浮在抽屉内容右下角 */}
       {isLoggedIn && open && nodeId && (
         <FloatButton
           icon={<span style={{ fontSize: 18 }}>📝</span>}
           tooltip="写只给自己看的笔记"
-          style={{ right: 520, bottom: 24 }}
+          style={{ right: isMobile ? 16 : 520, bottom: 24, ...(isMobile ? { zIndex: 101 } : {}) }}
           onClick={openNote}
         />
       )}
