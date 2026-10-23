@@ -53,13 +53,16 @@ export default function AppLayout() {
   useEffect(() => { refresh(); }, []);
 
   /** 新手引导自动触发（一次性，看过即存 localStorage 不再自动弹）：
-   *  游客在首页看「图谱怎么用 + 引导登录/反馈」；登录/注册成功后看「学习路线 + AI 助手 + 划词注解」 */
+   *  游客在首页看「图谱怎么用 + 引导登录/反馈」；登录/注册成功后看「学习路线 + AI 助手 + 划词注解」。
+   *  引导播放中（含跨页跳转导致 pathname 变化）不重复触发——否则步骤被重置回第 0 步、
+   *  页面来回跳转形成导航死循环（表现为浏览器闪烁刷新 + 灰色遮罩反复出现） */
+  const tourActive = useTour((s) => s.type !== null);
   useEffect(() => {
-    if (loading) return;
+    if (loading || tourActive) return;
     if (!user && loc.pathname === '/' && !isTourDone('guest')) startTour('guest');
     if (user && !isTourDone('user')) startTour('user');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user, loc.pathname]);
+  }, [loading, user, loc.pathname, tourActive]);
 
   useEffect(() => {
     fetch('/api/versions')

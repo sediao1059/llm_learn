@@ -12,10 +12,10 @@ interface ChatMsg {
 }
 
 const STEPS = [
-  { icon: '📋', text: '分析知识点清单', ms: 5000 },
+  { icon: '📋', text: '检索相关知识', ms: 5000 },
   { icon: '🧠', text: '理解学习目标', ms: 6000 },
   { icon: '🗺', text: '规划学习阶段', ms: 8000 },
-  { icon: '📚', text: '匹配知识点关联', ms: 8000 },
+  { icon: '📚', text: '权衡知识点取舍', ms: 8000 },
   { icon: '⚡', text: '优化路线结构', ms: 8000 },
 ];
 

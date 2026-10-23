@@ -404,6 +404,8 @@ model Version {
   version   String   @unique @db.VarChar(20)
   date      String   @db.VarChar(20)
   changes   String   @db.Text
+  // 整版本对用户不可见（仅管理员在管理页可见；管理端配置能力，对用户无感）
+  hidden    Int      @default(0)
   // 发布记录幂等键（自动登记机制用：同一台账条目重复启动/多环境不会重复入库；管理页手动建的记录为空）
   key       String?  @unique @map("release_key") @db.VarChar(64)
   createdAt DateTime @default(now())

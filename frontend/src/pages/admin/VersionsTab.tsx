@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Tag, Modal, Form, Input, DatePicker, Space, Popconfirm, Checkbox, message } from 'antd';
+import { Table, Button, Tag, Modal, Form, Input, DatePicker, Space, Popconfirm, Checkbox, Tooltip, message } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -27,7 +27,7 @@ export default function VersionsTab() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ date: dayjs(), changes: [{ text: '', visible: true }] });
+    form.setFieldsValue({ date: dayjs(), changes: [''], visible: true });
     setModalOpen(true);
   };
 
@@ -36,7 +36,8 @@ export default function VersionsTab() {
     form.setFieldsValue({
       version: r.version,
       date: dayjs(r.date || undefined),
-      changes: r.changes.map((c: any) => ({ text: c.text, visible: !c.hidden })),
+      changes: r.changes.length ? r.changes : [''],
+      visible: !r.hidden,
     });
     setModalOpen(true);
   };
@@ -46,9 +47,8 @@ export default function VersionsTab() {
     const body = {
       version: values.version,
       date: values.date?.format('YYYY-MM-DD') || '',
-      changes: (values.changes || [])
-        .filter((c: any) => (c.text || '').trim())
-        .map((c: any) => ({ text: c.text.trim(), hidden: !c.visible })),
+      changes: (values.changes || []).filter((c: any) => typeof c === 'string' ? c.trim() : true),
+      hidden: !values.visible,
     };
     const url = editing ? `/api/admin/versions/${editing.id}` : '/api/admin/versions';
     const method = editing ? 'PUT' : 'POST';
@@ -66,16 +66,17 @@ export default function VersionsTab() {
   };
 
   const columns = [
-    { title: '版本', dataIndex: 'version', width: 100, render: (v: string) => <Tag color="blue">v{v}</Tag> },
+    { title: '版本', dataIndex: 'version', width: 130, render: (v: string, r: any) => (
+      <Space size={4}>
+        <Tag color="blue">v{v}</Tag>
+        {r.hidden && <Tooltip title="该版本已设为不可见：仅管理员能看到，用户徽章不展示"><Tag>🔒 仅管理员</Tag></Tooltip>}
+      </Space>
+    ) },
     { title: '日期', dataIndex: 'date', width: 110 },
     { title: '变更', key: 'changes', render: (_: any, r: any) => (
-      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#555' }}>
-        {r.changes.slice(0, 3).map((c: any, i: number) => (
-          <li key={i} style={c.hidden ? { color: '#bfbfbf' } : undefined}>
-            {c.hidden ? '🔒 ' : ''}{c.text}
-          </li>
-        ))}
-        {r.changes.length > 3 && <li style={{ color: '#bfbfbf' }}>…共 {r.changes.length} 条（🔒 = 仅管理员可见）</li>}
+      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: r.hidden ? '#bfbfbf' : '#555' }}>
+        {r.changes.slice(0, 3).map((c: string, i: number) => <li key={i}>{c}</li>)}
+        {r.changes.length > 3 && <li style={{ color: '#bfbfbf' }}>…共 {r.changes.length} 条</li>}
       </ul>
     )},
     { title: '操作', key: 'ops', width: 130, render: (_: any, r: any) => (
@@ -122,28 +123,24 @@ export default function VersionsTab() {
                 <>
                   {fields.map(({ key, name, ...restField }) => (
                     <Space key={key} style={{ display: 'flex', marginBottom: 4 }} align="baseline">
-                      <Form.Item
-                        {...restField} name={[name, 'text']} noStyle
-                        rules={[{ required: true, message: '必填' }]}
-                      >
-                        <Input placeholder="✨ 新增了… / 🎨 优化了… / 🐛 修复了…" style={{ width: 250 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, 'visible']} valuePropName="checked" noStyle>
-                        <Checkbox>用户可见</Checkbox>
+                      <Form.Item {...restField} name={name} noStyle rules={[{ required: true, message: '必填' }]}>
+                        <Input placeholder="✨ 新增了… / 🎨 优化了… / 🐛 修复了…" style={{ width: 300 }} />
                       </Form.Item>
                       <DeleteOutlined onClick={() => remove(name)} style={{ color: '#999', cursor: 'pointer' }} />
                     </Space>
                   ))}
-                  <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => add({ text: '', visible: true })} block>
+                  <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => add('')} block>
                     添加一条
                   </Button>
-                  <div style={{ color: '#8c8c8c', fontSize: 12, marginTop: 6 }}>
-                    不勾「用户可见」的条目只有管理员能看到（列表与用户徽章 hover 均不展示，带 🔒 标记）。
-                  </div>
                 </>
               )}
             </Form.List>
           </Form.Item>
+          <Tooltip title="不勾选时整个版本只有管理员能看到（列表带 🔒），用户端徽章 hover 与公开接口完全不出现该版本。">
+            <Form.Item name="visible" valuePropName="checked" label="对用户可见">
+              <Checkbox>用户可以在版本徽章里看到这个版本</Checkbox>
+            </Form.Item>
+          </Tooltip>
         </Form>
       </Modal>
     </div>

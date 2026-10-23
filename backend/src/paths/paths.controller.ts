@@ -13,11 +13,20 @@ import { abortSignalFromClient } from '../llm/llm-queue';
 import { joinFlight, finishFlight } from '../llm/sse-flight';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 
-const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师。基于图谱里已有的知识点清单和用户的学习目标，规划一条阶段清晰、可执行的学习路线。
+const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师。围绕用户的学习目标和水平画像，规划一条阶段清晰、可执行、目标人群看得懂的学习路线。
 - 路线是多层树：阶段 → 主题 → 子主题（最多三层）
-- 每个主题尽量复用清单里已有的知识点（填 refId）
 - 阶段 3~6 个，每阶段 3~8 个主题；每个主题的 why 用一句大白话说清「学它干嘛、解决什么问题」，不写空话
+- 规划完全以用户目标和水平为准绳，不被已有知识体系绑架：用户是新手就按新手认知顺序铺路，老手直击进阶，不必迁就知识库的深浅与结构
+- 「相关知识点参考」只是可选素材：确实贴合路线才引用（在 refId 填对应 id）；不合适就按学习规律自拟主题，宁可完全不用也不硬凑
 严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":"","children":[]}]}]}`;
+
+/** 把文本拆成字符二元组集合（中英通用的轻量相似度基元，无需分词） */
+function bigrams(text: string): Set<string> {
+  const s = text.toLowerCase().replace(/\s+/g, '');
+  const set = new Set<string>();
+  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+  return set;
+}
 
 @Controller()
 @UseGuards(JwtAuthGuard, LlmBanGuard)
@@ -39,17 +48,39 @@ export class PathsController {
     const bundle = await this.knowledge.getBundleObj();
     const aiNodes = await this.prisma.aiNode.findMany();
     const knownIds = new Set([...bundle.nodes.map((n: any) => n.id), ...aiNodes.map(n => n.id)]);
-    const lines = bundle.nodes.map((n: any) => `- ${n.id}｜${n.title}｜${n.category}｜${n.tags.join('/')}`);
 
-    const lv = user.profileTags?.level === 'expert' ? '老手（跳过入门直击进阶）' : '新手（从打地基开始）';
-    const focus = (user.profileTags?.focus || []).join('、') || '未指定';
-    let prompt = `【用户画像】大模型${lv}；关注方向：${focus}\n\n已有知识点清单：\n${lines.join('\n')}\n\n`;
+    let existing: any = null;
     if (body.pathId) {
-      const existing = await this.prisma.learningPath.findUnique({ where: { id: Number(body.pathId) } });
+      existing = await this.prisma.learningPath.findUnique({ where: { id: Number(body.pathId) } });
       if (!existing) throw new NotFoundException('要调整的路线不存在');
       if (!existing.isOfficial && existing.createdBy !== user.username && user.role !== 'admin') {
         throw new ForbiddenException('只能调整官方路线或自己创建的路线');
       }
+    }
+
+    // 语义检索：按「目标 + 调整要求 + 已有路线主题」从全部知识点里挑最相关的一小部分做参考，
+    // 不再全量下发——模型对是否引用知识点自行判断（新手等画像与知识体系不搭时不必强行对齐）
+    const iterTitles: string[] = [];
+    if (existing) {
+      try {
+        const t = JSON.parse(existing.tree);
+        (t.stages || []).forEach((st: any) => {
+          iterTitles.push(String(st.title || ''), String(st.goal || ''));
+          (st.items || []).forEach((it: any) => iterTitles.push(String(it.title || ''), String(it.why || '')));
+        });
+      } catch { /* 树损坏时仅按目标与调整要求检索 */ }
+    }
+    const query = [goal, feedback, existing?.title, existing?.goal, ...iterTitles].filter(Boolean).join(' ');
+    const related = this.retrieveRelatedNodes(bundle.nodes, query);
+    const lines = related.map((n: any) => `- ${n.id}｜${n.title}｜${n.category}｜${n.tags.join('/')}`);
+
+    const lv = user.profileTags?.level === 'expert' ? '老手（跳过入门直击进阶）' : '新手（从打地基开始）';
+    const focus = (user.profileTags?.focus || []).join('、') || '未指定';
+    let prompt = `【用户画像】大模型${lv}；关注方向：${focus}\n\n`;
+    prompt += lines.length
+      ? `【相关知识点参考】（按学习目标检索，仅供参考——贴合才引用，不合适完全不用，不要为了凑数硬套）\n${lines.join('\n')}\n\n`
+      : `【相关知识点参考】未检索到与目标强相关的已有知识点，请完全按学习目标自行规划。\n\n`;
+    if (existing) {
       prompt += `【已有路线 JSON】\n${existing.tree}\n\n【用户调整要求】\n${feedback || goal}`;
     } else {
       prompt += `【用户学习目标】\n${goal}`;
@@ -203,6 +234,34 @@ id: ${nodeId}
     } catch (e: any) {
       throw new BadRequestException('路线更新校验失败：' + e.message + '，请重试');
     }
+  }
+
+  /**
+   * 轻量语义检索：把查询文本与各知识点的标题/标签/分类/摘要做字符二元组重合度打分，
+   * 取最相关的前 N 个（score > 0）作为生成路线的参考素材。
+   * 不引入向量库与 embedding 依赖，字符二元组对中文分词不敏感，够这步预筛使用；
+   * 引用与否最终由模型结合用户画像自行判断。
+   */
+  private retrieveRelatedNodes(nodes: any[], query: string, topN = 30): any[] {
+    const q = bigrams(query);
+    if (!q.size || !nodes.length) return [];
+    const overlap = (set: Set<string>) => {
+      let c = 0;
+      for (const g of set) if (q.has(g)) c++;
+      return c;
+    };
+    return nodes
+      .map(n => ({
+        n,
+        score: overlap(bigrams(String(n.title || ''))) * 5
+          + overlap(bigrams(String(n.tags?.join('') || ''))) * 4
+          + overlap(bigrams(String(n.category || ''))) * 4
+          + overlap(bigrams(String(n.summary || ''))) * 1,
+      }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN)
+      .map(x => x.n);
   }
 
   /** 在路线树 JSON 中按「阶段下标 + 主题下标链」定位条目（原地引用，用于回填 content） */

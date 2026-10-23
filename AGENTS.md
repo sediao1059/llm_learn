@@ -11,7 +11,7 @@
 2. **验证方式**：后端 `npx nest build`；前端 `npx tsc --noEmit && npx vite build`。不自动运行测试、不执行任何部署。
 3. **数据库**：Prisma schema 位于 `backend/prisma/schema.prisma`。新表用 `npx prisma db push` 同步；连接配置在 `backend/.env`（不入库）。任何对数据库结构的改动先征得所有者同意。
 4. **功能或行为变更必须同步更新**：SPEC.md 对应章节（必要时加变更记录）+ README.md 的功能说明。
-5. **版本发布记录**：每个用户可感知的功能性更新须在 `backend/version.releases.json` 台账追加一条 `{bump, date, changes}`（bump 三档：major 大版本 / minor 新功能 / patch 修复）；纯 UI/样式微调、仅管理员功能、部署与开发运维向改动（deploy.sh、脚本、重构等）**豁免登记**；后端启动时自动写入版本管理，无需手工录入（SPEC §4.23）。
+5. **版本发布记录**：每个用户可感知的功能性更新须在 `backend/version.releases.json` 台账追加一条 `{bump, date, changes}`（bump 三档：major 大版本 / minor 新功能 / patch 修复）；纯 UI/样式微调、仅管理员功能与配置（对用户无感）、部署与开发运维向改动（deploy.sh、脚本、重构等）**豁免登记**；后端启动时自动写入版本管理，无需手工录入（SPEC §4.23）。
 6. **数据分层**：手工笔记与 AI 沉淀的知识都只存 MySQL——手工笔记在管理页「笔记管理」页签编辑（SPEC §4.19；notes/ 文件同步链路已于 2026-10-22 废弃删除）；AI 功能不得自动改写手工笔记的本体内容（「✨ AI 补充」只追加区块）。
 7. 文案、注释、文档全部中文；LLM 调用统一走 `backend/src/llm/llm.service.ts`。
 8. **多会话并发**：文件内容与预期不符时先重读再改。
