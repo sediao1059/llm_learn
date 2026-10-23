@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Table, Button, Tag, Drawer, Radio, Select, Input, Space, Modal, Card, message, Empty,
 } from 'antd';
+import MarkdownContent from '../../components/MarkdownContent';
+import { uploadSourceLabel } from '../upload';
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -54,7 +56,7 @@ export default function UploadsTab() {
 
   const columns = [
     { title: '来源', key: 'src', ellipsis: true, render: (_: any, r: any) =>
-      r.kind === 'url' ? r.url : `📝《${r.title}》` },
+      r.kind === 'url' ? r.url : uploadSourceLabel(r) },
     { title: '提交者', dataIndex: 'submittedBy', width: 80 },
     { title: '状态', key: 'st', width: 100, render: (_: any, r: any) => {
       const map: Record<string, [string, string]> = {
@@ -112,7 +114,7 @@ export default function UploadsTab() {
 
       <Drawer
         open={!!viewUpload} onClose={() => setViewUpload(null)}
-        title={`审核入库 · ${viewUpload?.kind === 'url' ? viewUpload?.url?.slice(0, 30) : viewUpload?.title}`} width={620}
+        title={`审核入库 · ${viewUpload ? uploadSourceLabel(viewUpload).slice(0, 40) : ''}`} width={620}
         extra={<Button type="primary" onClick={() => approve(viewUpload)}>✅ 通过并入库</Button>}
       >
         {viewUpload && currentCol && (
@@ -136,8 +138,8 @@ export default function UploadsTab() {
                   </div>
                   <details style={{ marginTop: 6 }}>
                     <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8c8c8c' }}>查看内容</summary>
-                    <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.7, maxHeight: 200, overflowY: 'auto' }}>
-                      {it.content}
+                    <div style={{ marginTop: 8, maxHeight: 240, overflowY: 'auto' }}>
+                      <MarkdownContent content={it.content} fontSize={12} />
                     </div>
                   </details>
                 </div>

@@ -27,7 +27,7 @@ export class ModelsController {
       id: r.id, name: r.name, protocol: r.protocol,
       baseUrl: r.baseUrl, apiKeyMasked: maskKey(r.apiKey),
       modelId: r.modelId, maxTokens: r.maxTokens,
-      status: r.status, isGlobal: !!r.isGlobal,
+      status: r.status, isGlobal: !!r.isGlobal, isVisionGlobal: !!r.isVisionGlobal,
       createdAt: r.createdAt, updatedAt: r.updatedAt,
     };
   }
@@ -82,6 +82,9 @@ export class ModelsController {
     if (status === 'disabled' && existing.isGlobal) {
       await this.prisma.llmModel.update({ where: { id }, data: { isGlobal: 0 } });
     }
+    if (status === 'disabled' && existing.isVisionGlobal) {
+      await this.prisma.llmModel.update({ where: { id }, data: { isVisionGlobal: 0 } });
+    }
     return { model: this.pub(row) };
   }
 
@@ -99,6 +102,19 @@ export class ModelsController {
     await this.prisma.$transaction([
       this.prisma.llmModel.updateMany({ where: { isGlobal: 1 }, data: { isGlobal: 0 } }),
       this.prisma.llmModel.update({ where: { id }, data: { isGlobal: 1 } }),
+    ]);
+    return { ok: true };
+  }
+
+  /** 设为多模态默认（上传图片 / Word 插图解析用），全表至多一条，与全局默认互不影响 */
+  @Put(':id/vision-global')
+  async setVisionGlobal(@Param('id') id: number) {
+    const row = await this.prisma.llmModel.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('模型不存在');
+    if (row.status !== 'enabled') throw new BadRequestException('停用状态的模型不能设为多模态默认');
+    await this.prisma.$transaction([
+      this.prisma.llmModel.updateMany({ where: { isVisionGlobal: 1 }, data: { isVisionGlobal: 0 } }),
+      this.prisma.llmModel.update({ where: { id }, data: { isVisionGlobal: 1 } }),
     ]);
     return { ok: true };
   }

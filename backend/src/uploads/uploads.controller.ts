@@ -1,7 +1,8 @@
 import {
-  Controller, Get, Post, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Body, Param, Query, UseGuards, UseInterceptors, UploadedFiles,
   BadRequestException, NotFoundException,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
@@ -9,6 +10,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
 import { UploadGraphService } from './upload-graph.service';
+import { UploadFileService, IMAGE_SIZE_LIMIT } from './upload-file.service';
 
 @Controller()
 @UseGuards(JwtAuthGuard, LlmBanGuard)
@@ -17,6 +19,7 @@ export class UploadsController {
     private prisma: PrismaService,
     private llm: LlmService,
     private uploadGraph: UploadGraphService,
+    private uploadFile: UploadFileService,
   ) {}
 
   private excerpt(s: string, n = 160) {
@@ -25,7 +28,7 @@ export class UploadsController {
 
   private pub(u: any, items: any[], withContent = false) {
     return {
-      id: u.id, kind: u.kind, url: u.sourceUrl, title: u.title, note: u.note,
+      id: u.id, kind: u.kind, url: u.sourceUrl, title: u.title, note: u.note, fileName: u.fileName,
       status: u.status, errorMsg: u.errorMsg, rejectReason: u.rejectReason,
       submittedBy: u.submittedBy, createdAt: u.createdAt,
       decidedAt: u.decidedAt, decidedBy: u.decidedBy,
@@ -70,6 +73,94 @@ export class UploadsController {
     return { upload: { id: r.id, status: 'extracting' } };
   }
 
+  /** 文件上传：多张图片（png/jpg/webp，单张 <5M，≤9 张）或 1 个 Word（.docx，≤20M），不能混传 */
+  @Post('ai/uploads/file')
+  @UseInterceptors(FilesInterceptor('files', 10, { limits: { fileSize: 20 * 1024 * 1024 } }))
+  async createFile(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: any,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    if (!files?.length) throw new BadRequestException('请选择要上传的文件');
+    const isDocx = (f: Express.Multer.File) =>
+      f.originalname.toLowerCase().endsWith('.docx') ||
+      f.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const isImage = (f: Express.Multer.File) =>
+      ['image/png', 'image/jpeg', 'image/webp'].includes(f.mimetype);
+    if (files.some(f => !isDocx(f) && !isImage(f))) {
+      throw new BadRequestException('仅支持图片（png / jpg / webp）与 Word（.docx）文件；.doc 老格式请先在 Word 里另存为 .docx');
+    }
+    const docxFiles = files.filter(isDocx);
+    const imageFiles = files.filter(isImage);
+    if (docxFiles.length && imageFiles.length) throw new BadRequestException('图片与 Word 文档请分开提交');
+    for (const f of imageFiles) {
+      if (f.size >= IMAGE_SIZE_LIMIT) throw new BadRequestException(`「${f.originalname}」超过 5M，请压缩后再上传`);
+    }
+
+    let kind: 'image' | 'docx';
+    let fileName = '';
+    let rawText: string | null = null;
+    let imageBuffers: Buffer[] = [];
+    if (docxFiles.length) {
+      kind = 'docx';
+      fileName = docxFiles[0].originalname.slice(0, 300);
+      let parsed: { markdown: string; images: Buffer[] };
+      try {
+        parsed = await this.uploadFile.parseDocx(docxFiles[0].buffer);
+      } catch {
+        throw new BadRequestException('文档解析失败，请确认是有效的 .docx 文件（.doc 老格式请先在 Word 里另存为 .docx）');
+      }
+      if (!parsed.markdown && !parsed.images.length) throw new BadRequestException('文档里没有可解析的内容');
+      rawText = parsed.markdown;
+      imageBuffers = parsed.images;
+    } else {
+      kind = 'image';
+      if (imageFiles.length > 9) throw new BadRequestException('一次最多上传 9 张图片');
+      fileName = (imageFiles.length === 1
+        ? imageFiles[0].originalname
+        : `${imageFiles[0].originalname} 等 ${imageFiles.length} 张`).slice(0, 300);
+      imageBuffers = imageFiles.map(f => f.buffer);
+    }
+
+    // 压缩在入库前完成：用户直传图片压缩失败直接报错；Word 插图失败只跳过该图并移除占位
+    const compressed: { mimeType: string; base64: string; bytes: number; width: number; height: number; token: string }[] = [];
+    for (let i = 0; i < imageBuffers.length; i++) {
+      try {
+        compressed.push(await this.uploadFile.compressImage(imageBuffers[i]));
+      } catch (e) {
+        if (kind === 'image') throw new BadRequestException(`「${imageFiles[i]?.originalname || '图片'}」压缩后仍超过 5M，请换一张`);
+        rawText = (rawText || '').replace(new RegExp(`!\\[[^\\]]*\\]\\(img-${i}\\)`, 'g'), '');
+      }
+    }
+    // 有图就要用到多模态模型，提前校验避免拆解阶段才发现没配置
+    if (compressed.length) {
+      const vision = await this.llm.getVisionModel();
+      if (!vision) throw new BadRequestException('管理员尚未配置多模态默认模型，暂时无法解析图片，请先用「发链接 / 贴文本」');
+    }
+
+    const r = await this.prisma.upload.create({
+      data: {
+        kind, fileName, rawText,
+        note: String(body.note || '').trim().slice(0, 500),
+        submittedBy: user.username,
+        profileTags: JSON.stringify(user.profileTags),
+        status: 'extracting',
+      },
+    });
+    for (let i = 0; i < compressed.length; i++) {
+      const im = compressed[i];
+      await this.prisma.uploadImage.create({
+        data: {
+          uploadId: r.id, seq: i, mimeType: im.mimeType,
+          data: im.base64, bytes: im.bytes, width: im.width, height: im.height, token: im.token,
+        },
+      });
+    }
+    // 后台拆解（不阻塞请求）
+    this.runExtraction(r.id).catch(() => {});
+    return { upload: { id: r.id, status: 'extracting' } };
+  }
+
   @Get('ai/uploads/mine')
   async mine(@CurrentUser() user: CurrentUserType) {
     const uploads = await this.prisma.upload.findMany({
@@ -104,21 +195,48 @@ export class UploadsController {
           .slice(0, 60000);
         if (sourceText.length < 500) throw new Error(`正文过短（${sourceText.length} 字）`);
       }
-      const model = await this.llm.getGlobalModel();
-      if (!model) throw new Error('尚未配置全局默认模型');
+      const imgRows = await this.prisma.uploadImage.findMany({ where: { uploadId }, orderBy: { seq: 'asc' } });
+      const images = imgRows.map(im => ({ mimeType: im.mimeType, base64: im.data }));
+      // 有图走多模态默认（未配置则失败给明确原因），无图沿用全局默认
+      let model: any;
+      if (images.length) {
+        model = await this.llm.getVisionModel();
+        if (!model) throw new Error('管理员尚未配置多模态默认模型，无法解析图片');
+      } else {
+        model = await this.llm.getGlobalModel();
+        if (!model) throw new Error('尚未配置全局默认模型');
+      }
       const bundleNodes = await this.prisma.note.findMany({ select: { id: true, title: true, category: true } });
       const cols = await this.prisma.aiNode.findMany({ where: { id: { startsWith: 'col-' } }, select: { id: true, title: true } });
+      const baseRules = `- 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要：外行能听懂，能打比方就打比方
+- 正文直白表述：术语第一次出现紧跟括号翻译，先说结论再展开，不写空话套话`;
+      const imageRule = `- 图片是核心内容：在讲到对应内容的位置用 ![](img-N) 原样引用图片（N 从 0 开始，按给出顺序编号），保持图文对照；只能引用给出的编号，不要编造`;
+      const jsonRule = `严格输出 JSON：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]}`;
       const system = up.kind === 'url'
         ? `你是知识采集引擎。把网页文章拆解成 1~5 个知识点（markdown 笔记+检索标签+关联已有 id+专栏建议）。
-- 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要：外行能听懂，能打比方就打比方
-- 正文直白表述：术语第一次出现紧跟括号翻译，先说结论再展开，不写空话套话
-严格输出 JSON：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]`
-        : `你是知识整理引擎。把用户文本格式化成 1~5 个知识点（不添加原文没有的内容）。
+${baseRules}
+${jsonRule}`
+        : up.kind === 'docx'
+          ? `你是知识采集引擎。把 Word 文档拆解成 1~5 个知识点（markdown 笔记+检索标签+关联已有 id+专栏建议）。
+${baseRules}
+${imageRule}
+${jsonRule}`
+          : up.kind === 'image'
+            ? `你是图片知识提取引擎。把用户上传的图片整理成 1~5 个知识点（markdown 笔记+检索标签+关联已有 id+专栏建议），不添加图中没有的内容。
+${baseRules}
+${imageRule}
+${jsonRule}`
+            : `你是知识整理引擎。把用户文本格式化成 1~5 个知识点（不添加原文没有的内容）。
 - 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要；术语第一次出现紧跟括号翻译，直白表述不写空话
-严格输出 JSON：{"collection":{"mode":"new","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]}`;
+${jsonRule}`;
+      const context = `已有知识点：\n${bundleNodes.map(n=>`- ${n.id}｜${n.title}`).join('\n')}\n\n已有专栏：\n${cols.map(c=>`${c.id}《${c.title}》`).join('、')||'（暂无）'}`;
+      const bodyText = up.kind === 'image'
+        ? `${context}\n\n【图片】共 ${images.length} 张，编号 img-0 ~ img-${images.length - 1}${up.note ? `\n上传者备注：${up.note}` : ''}`
+        : `${context}\n\n【正文】\n${sourceText}`;
       const r = await this.llm.chatText(model, {
         system,
-        user: `已有知识点：\n${bundleNodes.map(n=>`- ${n.id}｜${n.title}`).join('\n')}\n\n已有专栏：\n${cols.map(c=>`${c.id}《${c.title}》`).join('、')||'（暂无）'}\n\n【正文】\n${sourceText}`,
+        user: bodyText,
+        ...(images.length ? { images } : {}),
         timeoutMs: 300_000,
       });
       if (!r.ok) throw new Error(r.error);
@@ -126,20 +244,49 @@ export class UploadsController {
       const raw = JSON.parse(r.text.slice(start, end + 1));
       if (!raw.items?.length) throw new Error('拆解结果没有有效知识点');
 
-      await this.prisma.uploadItem.deleteMany({ where: { uploadId } });
+      // 图片占位符 → 公开图片地址；模型写法不规范（[[img-N]]、（img-N）等变体）也兜住
+      const tokenByIdx = new Map<number, string>();
+      imgRows.forEach((im, i) => tokenByIdx.set(i, im.token));
+      const usedIdx = new Set<number>();
+      const fixImages = (content: string): string => {
+        let out = content.replace(/!\[([^\]]*)\]\(img-(\d+)\)/g, (_m, alt: string, n: string) => {
+          const token = tokenByIdx.get(Number(n));
+          if (!token) return '';
+          usedIdx.add(Number(n));
+          return `![${alt || '原文图片'}](/api/uploads/images/${token})`;
+        });
+        out = out.replace(/[\[（(]*img-(\d+)[\]）)]*/g, (_m, n: string) => {
+          const token = tokenByIdx.get(Number(n));
+          if (!token) return '';
+          usedIdx.add(Number(n));
+          return `![原文图片](/api/uploads/images/${token})`;
+        });
+        return out;
+      };
+
       const knownIds = new Set(bundleNodes.map(n => n.id));
+      const itemsData: any[] = [];
       for (let i = 0; i < Math.min(raw.items.length, 5); i++) {
         const it = raw.items[i];
         if (!it.title || !it.content) continue;
-        await this.prisma.uploadItem.create({
-          data: {
-            uploadId, seq: i,
-            title: String(it.title).slice(0, 120),
-            content: String(it.content).slice(0, 30000),
-            tags: JSON.stringify((it.tags || []).slice(0, 6)),
-            links: JSON.stringify((it.links || []).filter((l: string) => knownIds.has(l)).slice(0, 5)),
-          },
+        itemsData.push({
+          uploadId, seq: itemsData.length,
+          title: String(it.title).slice(0, 120),
+          content: fixImages(String(it.content)).slice(0, 30000),
+          tags: JSON.stringify((it.tags || []).slice(0, 6)),
+          links: JSON.stringify((it.links || []).filter((l: string) => knownIds.has(l)).slice(0, 5)),
         });
+      }
+      if (!itemsData.length) throw new Error('拆解结果没有有效知识点');
+      // 模型没引用到的图片统一挂在第一个条目末尾，保证不丢图
+      const unreferenced = imgRows.map((_im, i) => i).filter(i => !usedIdx.has(i));
+      if (unreferenced.length) {
+        const tail = '\n\n#### 原文图片\n\n' + unreferenced.map(i => `![原文图片](/api/uploads/images/${tokenByIdx.get(i)})`).join('\n\n');
+        itemsData[0].content = (itemsData[0].content + tail).slice(0, 30000);
+      }
+      await this.prisma.uploadItem.deleteMany({ where: { uploadId } });
+      for (const d of itemsData) {
+        await this.prisma.uploadItem.create({ data: d });
       }
       const col = raw.collection || {};
       await this.prisma.upload.update({

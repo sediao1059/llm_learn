@@ -7,7 +7,13 @@ const IDLE_CAP_MS = 300 * 1000;
 export interface LlmModelRow {
   id: number; name: string; protocol: string; baseUrl: string;
   apiKey: string; modelId: string; maxTokens: number | null;
-  status: string; isGlobal: number;
+  status: string; isGlobal: number; isVisionGlobal: number;
+}
+
+/** 多模态消息里的图片（base64 不带 data: 前缀） */
+export interface ChatImage {
+  mimeType: string;
+  base64: string;
 }
 
 export interface ChatResult {
@@ -35,6 +41,14 @@ export class LlmService {
   async getGlobalModel(): Promise<LlmModelRow | null> {
     const row = await this.prisma.llmModel.findFirst({
       where: { isGlobal: 1, status: 'enabled' },
+    });
+    return row as unknown as LlmModelRow || null;
+  }
+
+  /** 多模态默认模型（上传图片 / Word 插图解析用）；未配置返回 null */
+  async getVisionModel(): Promise<LlmModelRow | null> {
+    const row = await this.prisma.llmModel.findFirst({
+      where: { isVisionGlobal: 1, status: 'enabled' },
     });
     return row as unknown as LlmModelRow || null;
   }
@@ -179,11 +193,32 @@ export class LlmService {
     }
   }
 
-  /** 一次性取整段回答 */
-  async chatText(model: LlmModelRow, opts: { system?: string; user: string; timeoutMs?: number } & QueueOpts): Promise<ChatResult> {
+  /** 一次性取整段回答；带 images 时按协议组装多模态 content（openai: image_url / anthropic: image block） */
+  async chatText(
+    model: LlmModelRow,
+    opts: { system?: string; user: string; images?: ChatImage[]; timeoutMs?: number } & QueueOpts,
+  ): Promise<ChatResult> {
+    let content: any = opts.user;
+    if (opts.images?.length) {
+      content = model.protocol === 'anthropic'
+        ? [
+            { type: 'text', text: opts.user },
+            ...opts.images.map(im => ({
+              type: 'image',
+              source: { type: 'base64', media_type: im.mimeType, data: im.base64 },
+            })),
+          ]
+        : [
+            { type: 'text', text: opts.user },
+            ...opts.images.map(im => ({
+              type: 'image_url',
+              image_url: { url: `data:${im.mimeType};base64,${im.base64}` },
+            })),
+          ];
+    }
     return this.chatStream(model, {
       system: opts.system,
-      messages: [{ role: 'user', content: opts.user }],
+      messages: [{ role: 'user', content }],
       timeoutMs: opts.timeoutMs,
       userId: opts.userId,
       username: opts.username,

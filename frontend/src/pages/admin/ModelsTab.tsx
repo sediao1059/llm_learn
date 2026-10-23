@@ -99,6 +99,14 @@ export default function ModelsTab() {
     } catch (e: any) { message.error(e.message); }
   };
 
+  const setVisionGlobal = async (m: any) => {
+    try {
+      await req(`/llm/models/${m.id}/vision-global`, 'PUT');
+      message.success(`已把「${m.name}」设为多模态默认`);
+      load();
+    } catch (e: any) { message.error(e.message); }
+  };
+
   const remove = async (m: any) => {
     try {
       await req(`/llm/models/${m.id}`, 'DELETE');
@@ -115,6 +123,16 @@ export default function ModelsTab() {
         : (r.status === 'enabled'
           ? <Tooltip title="设为全局默认（对话与 AI 功能默认用它）">
               <Button size="small" type="link" onClick={() => setGlobal(r)}>设默认</Button>
+            </Tooltip>
+          : '—'),
+    },
+    {
+      title: '多模态', dataIndex: 'isVisionGlobal', width: 86,
+      render: (v: boolean, r: any) => v
+        ? <Tag color="geekblue">👁 默认</Tag>
+        : (r.status === 'enabled'
+          ? <Tooltip title="设为多模态默认（上传图片 / Word 插图的解析用它，需选支持看图的模型）">
+              <Button size="small" type="link" onClick={() => setVisionGlobal(r)}>设多模态</Button>
             </Tooltip>
           : '—'),
     },
@@ -160,7 +178,7 @@ export default function ModelsTab() {
     <>
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-          对话与所有 AI 功能默认用「全局默认」模型；首个启用的模型自动成为全局默认。密钥明文存库、列表脱敏显示。
+          对话与所有 AI 功能默认用「全局默认」模型；首个启用的模型自动成为全局默认；上传图片 / Word 插图的解析用「多模态默认」模型（如与 GLM 同供应商、模型 ID 填 GLM-5.3-Flash）。密钥明文存库、列表脱敏显示。
         </span>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增模型</Button>
       </div>

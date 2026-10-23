@@ -1,13 +1,23 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, Tabs, Form, Input, Button, Tag, Statistic, message, Alert, Tooltip } from 'antd';
+import { Card, Tabs, Form, Input, Button, Tag, Statistic, message, Alert, Tooltip, Upload } from 'antd';
 import { api } from '../../api/client';
 import UploadItemReadDrawer from '../../components/UploadItemReadDrawer';
 import { useResponsive } from '../../hooks/useResponsive';
 
+const { Dragger } = Upload;
+
 interface Upload {
-  id: number; kind: string; url: string; title: string; note: string;
+  id: number; kind: string; url: string; title: string; note: string; fileName?: string;
   status: string; errorMsg: string | null; rejectReason: string | null;
   submittedBy: string; createdAt: string; items: any[];
+}
+
+/** 列表里展示上传来源：链接 / 文本 / 图片 / Word */
+export function uploadSourceLabel(u: { kind: string; url?: string; title?: string; fileName?: string }) {
+  if (u.kind === 'url') return u.url || '';
+  if (u.kind === 'image') return `🖼 ${u.fileName || '图片'}`;
+  if (u.kind === 'docx') return `📄 ${u.fileName || 'Word 文档'}`;
+  return `📝《${u.title || '文本'}》`;
 }
 
 export default function UploadPage() {
@@ -17,6 +27,8 @@ export default function UploadPage() {
   const [contrib, setContrib] = useState({ total: 0, days: [] as any[] });
   const [submitting, setSubmitting] = useState(false);
   const [reading, setReading] = useState<any>(null);
+  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileForm] = Form.useForm();
 
   const load = useCallback(() => {
     api.get('/ai/uploads/mine').then(r => setUploads(r.data.uploads || [])).catch(() => {});
@@ -44,6 +56,46 @@ export default function UploadPage() {
     try {
       await api.post('/ai/uploads', { kind: 'text', ...values });
       message.success('已提交，AI 正在整理');
+      load();
+    } catch (e: any) { message.error(e?.response?.data?.message || '提交失败'); }
+    finally { setSubmitting(false); }
+  };
+
+  // 文件上传：入列表前先挡掉类型/超限的（与服务端同一套规则）
+  const beforeUpload = (file: File) => {
+    const isDocx = file.name.toLowerCase().endsWith('.docx');
+    const isImage = /^image\/(png|jpe?g|webp)$/.test(file.type);
+    if (!isDocx && !isImage) {
+      message.error('仅支持图片（png / jpg / webp）与 Word（.docx）文件；.doc 老格式请先另存为 .docx');
+      return Upload.LIST_IGNORE;
+    }
+    if (isImage && file.size >= 5 * 1024 * 1024) {
+      message.error(`「${file.name}」超过 5M，请压缩后再上传`);
+      return Upload.LIST_IGNORE;
+    }
+    if (isDocx && file.size >= 20 * 1024 * 1024) {
+      message.error(`「${file.name}」超过 20M`);
+      return Upload.LIST_IGNORE;
+    }
+    return false; // 阻止自动上传，只进待提交列表
+  };
+
+  const submitFile = async (values: any) => {
+    if (!fileList.length) { message.warning('请先选择要上传的文件'); return; }
+    const docxCount = fileList.filter(f => String(f.name || '').toLowerCase().endsWith('.docx')).length;
+    const imageCount = fileList.length - docxCount;
+    if (docxCount > 1) { message.error('一次只能上传 1 个 Word 文档'); return; }
+    if (docxCount && imageCount) { message.error('图片与 Word 文档请分开提交'); return; }
+    if (imageCount > 9) { message.error('一次最多上传 9 张图片'); return; }
+    const fd = new FormData();
+    fileList.forEach(f => fd.append('files', f.originFileObj || f));
+    fd.append('note', values?.note || '');
+    setSubmitting(true);
+    try {
+      await api.post('/ai/uploads/file', fd);
+      message.success('已提交，AI 正在解析');
+      setFileList([]);
+      fileForm.resetFields();
       load();
     } catch (e: any) { message.error(e?.response?.data?.message || '提交失败'); }
     finally { setSubmitting(false); }
@@ -85,6 +137,29 @@ export default function UploadPage() {
                 <Button type="primary" htmlType="submit" loading={submitting}>🚀 提交并让 AI 整理</Button>
               </Form>
             )},
+            { key: 'file', label: '📎 传文件', children: (
+              <Form form={fileForm} onFinish={submitFile} labelCol={{ span: 24 }}>
+                <Form.Item label="图片（png / jpg / webp）或 Word 文档（.docx）">
+                  <Dragger
+                    fileList={fileList}
+                    beforeUpload={beforeUpload}
+                    onChange={({ fileList: fl }) => setFileList(fl)}
+                    accept=".docx,image/png,image/jpeg,image/webp"
+                    multiple
+                  >
+                    <p className="ant-upload-drag-icon">📎</p>
+                    <p className="ant-upload-text">点击或拖拽文件到这里</p>
+                    <p className="ant-upload-hint">
+                      图片：单张需小于 5M（上传后自动压缩），一次最多 9 张<br />
+                      Word：仅 .docx（.doc 请先另存为 .docx），一次 1 个，文中插图一并解析<br />
+                      图片与 Word 文档请分开提交
+                    </p>
+                  </Dragger>
+                </Form.Item>
+                <Form.Item name="note" label="备注（可选，会一并交给 AI 参考）"><Input maxLength={200} /></Form.Item>
+                <Button type="primary" htmlType="submit" loading={submitting}>🚀 提交并让 AI 解析</Button>
+              </Form>
+            )},
           ]} />
         </Card>
 
@@ -96,7 +171,7 @@ export default function UploadPage() {
               <Card key={u.id} size="small" style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13, wordBreak: 'break-all', flex: 1 }}>
-                    {u.kind === 'url' ? u.url : `📝《${u.title}》`}
+                    {uploadSourceLabel(u)}
                   </span>
                   {statusTag(u.status)}
                 </div>

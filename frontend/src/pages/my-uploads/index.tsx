@@ -3,9 +3,10 @@ import { Card, Tag, Alert, Tooltip, Empty } from 'antd';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import UploadItemReadDrawer from '../../components/UploadItemReadDrawer';
+import { uploadSourceLabel } from '../upload';
 
 interface Upload {
-  id: number; kind: string; url: string; title: string; note: string;
+  id: number; kind: string; url: string; title: string; note: string; fileName?: string;
   status: string; errorMsg: string | null; rejectReason: string | null;
   submittedBy: string; createdAt: string; items: any[];
 }
@@ -55,7 +56,7 @@ export default function MyUploadsPage() {
               <span style={{ fontSize: 13, wordBreak: 'break-all', flex: 1 }}>
                 {u.kind === 'url'
                   ? <a href={u.url} target="_blank" rel="noreferrer">{u.url}</a>
-                  : `📝《${u.title}》`}
+                  : uploadSourceLabel(u)}
               </span>
               {statusTag(u.status)}
               <span style={{ color: '#909399', fontSize: 12 }}>

@@ -85,6 +85,10 @@ export default function MarkdownContent({ content, fontSize }: { content: string
               style={{ color: '#1677ff', textDecoration: 'none' }}>{children}</a>
           ),
           hr: () => <hr style={{ border: 'none', borderTop: '1px solid #e8e8e8', margin: '14px 0' }} />,
+          img: ({ src, alt }) => (
+            <img src={src} alt={alt || ''} loading="lazy"
+              style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0' }} />
+          ),
         }}
       >
         {content}
