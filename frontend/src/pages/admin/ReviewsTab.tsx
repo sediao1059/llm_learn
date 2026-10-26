@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Table, Button, Tag, Drawer, Radio, Select, Space, Modal, Input, message, Card, Descriptions, Empty,
+  Table, Button, Tag, Drawer, Radio, Select, Space, Modal, Input, message, Card, Descriptions, Empty, Checkbox,
 } from 'antd';
 import { trackLlmCall } from '../../utils/llmQueueNotice';
 import MarkdownContent from '../../components/MarkdownContent';
@@ -49,6 +49,7 @@ export default function ReviewsTab() {
         [sub.id]: {
           decision: d.decision,
           content: d.content || '',
+          sourceNode: d.sourceNode || null,
           tags: { level: sub.profileTags?.level || 'novice', focus: sub.profileTags?.focus || [] },
         },
       }));
@@ -87,7 +88,9 @@ export default function ReviewsTab() {
   const subColumns = [
     { title: '★', dataIndex: 'importance', width: 50, render: (v: number) =>
       <span style={{ color: '#faad14' }}>{'★'.repeat(v)}</span> },
-    { title: '摘要', dataIndex: 'questionExcerpt', ellipsis: true },
+    { title: '摘要', dataIndex: 'questionExcerpt', ellipsis: true, render: (v: any, r: any) => (
+      <>{v}{r.sourceNodeId && <span style={{ color: '#999', fontSize: 12 }}> · 追问自 {r.sourceNodeId}</span>}</>
+    )},
     { title: '提交者', dataIndex: 'submittedBy', width: 90 },
     { title: '画像', key: 'tags', width: 100, render: (_: any, r: any) => (
       <Tag color={r.profileTags?.level === 'expert' ? 'warning' : 'success'}>
@@ -199,6 +202,25 @@ export default function ReviewsTab() {
                 {(drafts[viewSub.id].decision.tags || []).map((t: string) => <Tag key={t}>{t}</Tag>)}
                 <Tag color="blue">未分层</Tag>
               </Descriptions.Item>
+              {drafts[viewSub.id].sourceNode && (
+                <Descriptions.Item label="关联来源">
+                  <Checkbox
+                    checked={drafts[viewSub.id].decision.relateToSource !== false}
+                    onChange={e => setDrafts(prev => ({
+                      ...prev,
+                      [viewSub.id]: {
+                        ...prev[viewSub.id],
+                        decision: { ...prev[viewSub.id].decision, relateToSource: e.target.checked },
+                      },
+                    }))}
+                  >
+                    🔗 关联到《{drafts[viewSub.id].sourceNode.title}》
+                  </Checkbox>
+                  <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>
+                    提交来自对这篇笔记的追问；AI 判断{drafts[viewSub.id].decision.relateToSource !== false ? '与本篇相关，建议关联（追问跑题可取消）' : '可能跑题，默认不关联（确认相关可勾选）'}
+                  </div>
+                </Descriptions.Item>
+              )}
             </Descriptions>
             <div style={{
               border: '1px solid #e8e8e8', borderRadius: 8, padding: 12, background: '#fafafa',

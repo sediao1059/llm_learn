@@ -30,32 +30,60 @@ export class SubmissionsController {
       submittedBy: r.submittedBy, createdAt: r.createdAt,
       decidedAt: r.decidedAt, decidedBy: r.decidedBy,
       rejectReason: r.rejectReason, resultNodeId: r.resultNodeId,
+      sourceNodeId: r.sourceNodeId,
       profileTags: (()=>{try{return JSON.parse(r.profileTags||'{}')}catch{return{level:'novice',focus:[]}}})(),
       questionExcerpt: this.excerpt(r.questionText),
     };
+  }
+
+  /** 来源知识点校验（整篇追问沉淀用）：节点真实存在（静态笔记或 AI 节点）才返回 {id,title}，否则 null（不阻塞沉淀） */
+  private async resolveSourceNode(nodeId: any) {
+    const id = String(nodeId || '').trim().slice(0, 120);
+    if (!id || id.startsWith('path-')) return null;
+    const bundle = await this.knowledge.getBundleObj();
+    const hit = (bundle.nodes || []).find((n: any) => n.id === id);
+    if (hit) return { id, title: hit.title };
+    const ai = await this.prisma.aiNode.findUnique({ where: { id } });
+    return ai ? { id, title: ai.title } : null;
   }
 
   // ===== 用户提交 =====
   @Post('ai/submissions')
   async submit(@Body() body: any, @CurrentUser() user: CurrentUserType) {
     if (user.role === 'admin') throw new BadRequestException('管理员无需提交审核，请直接使用「预览→确认写入」流程');
-    const q = body.questionId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } }) : null;
-    const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
-    if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
-    // 会话个人可见：只能沉淀自己会话里的问答（防拿别人 messageId 越权提交）
-    const chat = await this.prisma.aiChat.findUnique({ where: { id: q.chatId } });
-    if (!chat || chat.createdBy !== user.username) throw new BadRequestException('只能沉淀自己会话里的问答');
+    // 两种来源：助手会话问答（questionId/answerId，校验会话归属）或整篇追问快照（questionText/answerText + sourceNodeId，对话不落库）
+    let questionText = '', answerText = '', chatId: number | null = null;
+    let questionId: number | null = null, answerId: number | null = null;
+    let sourceNodeId: string | null = null;
+    if (body.questionId && body.answerId) {
+      const q = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } });
+      const a = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } });
+      if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
+      // 会话个人可见：只能沉淀自己会话里的问答（防拿别人 messageId 越权提交）
+      const chat = await this.prisma.aiChat.findUnique({ where: { id: q.chatId } });
+      if (!chat || chat.createdBy !== user.username) throw new BadRequestException('只能沉淀自己会话里的问答');
+      chatId = q.chatId; questionId = q.id; answerId = a.id;
+      questionText = q.content; answerText = a.content;
+    } else {
+      questionText = String(body.questionText || '').trim().slice(0, 2000);
+      answerText = String(body.answerText || '').trim().slice(0, 20000);
+      if (!questionText || !answerText) throw new BadRequestException('问答内容不能为空');
+      // 来源节点（被追问的知识点）不存在时静默忽略，不阻塞提交
+      const src = await this.resolveSourceNode(body.sourceNodeId);
+      if (src) sourceNodeId = src.id;
+    }
     const importance = Number(body.importance);
     if (!Number.isInteger(importance) || importance < 1 || importance > 5) throw new BadRequestException('重要星级需为 1–5');
     const r = await this.prisma.depositSubmission.create({
       data: {
-        chatId: q.chatId, questionId: q.id, answerId: a.id,
-        questionText: q.content, answerText: a.content,
+        chatId, questionId, answerId,
+        questionText, answerText,
         importance,
         articleNote: String(body.articleNote || '').trim().slice(0, 100),
         reviewNote: String(body.reviewNote || '').trim().slice(0, 500),
         submittedBy: user.username,
         profileTags: JSON.stringify(user.profileTags),
+        ...(sourceNodeId ? { sourceNodeId } : {}),
       },
     });
     return { submission: { id: r.id, status: 'pending' } };
@@ -70,8 +98,14 @@ export class SubmissionsController {
   }
 
   // ===== 沉淀预览与直写（管理员用） =====
-  /** 轻量沉淀（2026-10-22）：LLM 只提取标题/分类/标签，回答原文直接做正文，不再做全库对比与合并判断 */
-  private async extractMeta(question: string, answer: string, user: CurrentUserType, req: Request) {
+  /**
+   * 轻量沉淀（2026-10-22）：LLM 只提取标题/分类/标签，回答原文直接做正文，不再做全库对比与合并判断。
+   * 整篇追问场景（2026-10-26）带来源知识点：LLM 顺带判断新知识与来源是否相关（relateToSource），供建关联用。
+   */
+  private async extractMeta(
+    question: string, answer: string, user: CurrentUserType, req: Request,
+    sourceNode?: { id: string; title: string } | null,
+  ) {
     const model = await this.llm.getGlobalModel();
     if (!model) throw new BadRequestException('尚未配置全局默认模型');
     const bundle = await this.knowledge.getBundleObj();
@@ -80,10 +114,13 @@ export class SubmissionsController {
       ...bundle.nodes.map((n: any) => n.category),
       ...aiNodes.map((n: any) => n.category),
     ])].filter(Boolean);
-    const system = `你是知识库沉淀助手。根据下面这组问答，为新知识点起一个简短标题，并从现有分类中选一个最合适的（都不合适才给新的分类名），再给 1~3 个简短标签。不要改写、不要总结回答内容。严格输出 JSON：{"title":"","category":"","tags":[]}`;
+    const relatePart = sourceNode
+      ? `这组问答来自用户对知识点《${sourceNode.title}》的追问。请再判断：新知识点与《${sourceNode.title}》是否确实相关（用户追问可能跑题）——确实相关给 true，只是沾边或已经跑题给 false。`
+      : '';
+    const system = `你是知识库沉淀助手。根据下面这组问答，为新知识点起一个简短标题，并从现有分类中选一个最合适的（都不合适才给新的分类名），再给 1~3 个简短标签。不要改写、不要总结回答内容。${relatePart}严格输出 JSON：{"title":"","category":"","tags":[]${sourceNode ? ',"relateToSource":true' : ''}}`;
     const r = await this.llm.chatText(model, {
       system,
-      user: `现有分类：${categories.join('、') || '（暂无）'}\n\n【问题】\n${question}\n\n【回答】\n${answer}`,
+      user: `${sourceNode ? `【来源知识点】${sourceNode.title}\n\n` : ''}现有分类：${categories.join('、') || '（暂无）'}\n\n【问题】\n${question}\n\n【回答】\n${answer}`,
       timeoutMs: 120 * 1000,
       userId: user.id, username: user.username,
       clientSignal: abortSignalFromClient(req),
@@ -96,15 +133,17 @@ export class SubmissionsController {
       decision.category = String(decision.category || '').trim().slice(0, 60);
       decision.tags = (Array.isArray(decision.tags) ? decision.tags : [])
         .map((t: any) => String(t).trim().slice(0, 20)).filter(Boolean).slice(0, 3);
+      // 模型漏给 relateToSource 时默认相关（追问本就是针对来源知识点提的问），预览/审核弹窗可人工改
+      if (sourceNode) decision.relateToSource = decision.relateToSource !== false;
       return decision;
     } catch {
       throw new BadRequestException('模型返回的提取结果无法解析，请重试');
     }
   }
 
-  /** 正文一律取服务端库里存的回答原文，不信任客户端回传 */
+  /** 正文优先取服务端库里存的回答原文；整篇追问对话不落库，以提交快照为准。links 仅整篇追问关联场景写入来源节点 id */
   private async createAiNodeFromAnswer(d: {
-    title: string; category?: string; tags?: string[]; content: string;
+    title: string; category?: string; tags?: string[]; content: string; links?: string[];
     createdBy: string; submissionId?: number; profileTags: string;
   }) {
     const id = 'ai-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -115,7 +154,7 @@ export class SubmissionsController {
         layer: '未分层',
         tags: JSON.stringify(d.tags || []),
         content: d.content,
-        links: '[]',
+        links: JSON.stringify(d.links || []),
         createdBy: d.createdBy,
         ...(d.submissionId ? { submissionId: d.submissionId } : {}),
         profileTags: d.profileTags,
@@ -126,31 +165,52 @@ export class SubmissionsController {
   @Post('ai/knowledge/preview')
   @Roles('admin')
   async preview(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
-    const q = body.questionId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } }) : null;
-    const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
-    if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
-    const decision = await this.extractMeta(q.content, a.content, user, req);
-    return { decision, content: a.content };
+    // 两种来源：助手会话问答（questionId/answerId）或整篇追问快照（question/answer + sourceNodeId）
+    let question: string, answer: string, sourceNode: { id: string; title: string } | null = null;
+    if (body.questionId && body.answerId) {
+      const q = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } });
+      const a = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } });
+      if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
+      question = q.content; answer = a.content;
+    } else {
+      question = String(body.question || '').trim().slice(0, 2000);
+      answer = String(body.answer || '').trim().slice(0, 20000);
+      if (!question || !answer) throw new BadRequestException('问答内容不能为空');
+      sourceNode = await this.resolveSourceNode(body.sourceNodeId);
+    }
+    const decision = await this.extractMeta(question, answer, user, req, sourceNode);
+    return { decision, content: answer, ...(sourceNode ? { sourceNode } : {}) };
   }
 
   @Post('ai/knowledge/apply')
   @Roles('admin')
   async apply(@Body() body: any, @CurrentUser() user: CurrentUserType) {
-    const a = body.answerId ? await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } }) : null;
-    if (!a) throw new BadRequestException('回答消息不存在');
+    // 助手会话来源：正文一律取库里回答原文，不信任客户端回传；整篇追问来源：对话不落库，以提交快照为准
+    let content: string;
+    if (body.answerId) {
+      const a = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } });
+      if (!a) throw new BadRequestException('回答消息不存在');
+      content = a.content;
+    } else {
+      content = String(body.content || '').trim().slice(0, 20000);
+      if (!content) throw new BadRequestException('回答内容不能为空');
+    }
     const decision = body.decision || {};
     const title = String(decision.title || '').trim().slice(0, 80);
     if (!title) throw new BadRequestException('标题不能为空');
+    // AI 判断相关（且管理员未在预览里取消勾选）才关联来源知识点
+    const sourceNode = await this.resolveSourceNode(body.sourceNodeId);
+    const links = sourceNode && decision.relateToSource !== false ? [sourceNode.id] : [];
     const node = await this.createAiNodeFromAnswer({
       title, category: decision.category, tags: decision.tags,
-      content: a.content,
+      content, links,
       createdBy: user.username,
       profileTags: JSON.stringify(user.profileTags),
     });
     await this.prisma.aiReview.create({
       data: { nodeId: node.id, reviewer: user.username, verdict: 'approve', note: '管理员直接沉淀' },
     });
-    return { action: 'create', nodeId: node.id, title: node.title };
+    return { action: 'create', nodeId: node.id, title: node.title, linkedToSource: links.length > 0 };
   }
 
   // ===== 管理端 =====
@@ -170,8 +230,10 @@ export class SubmissionsController {
     const row = await this.prisma.depositSubmission.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('提交不存在');
     if (row.status !== 'pending') throw new BadRequestException('该提交已处理过');
-    const decision = await this.extractMeta(row.questionText, row.answerText, user, req);
-    return { decision, content: row.answerText };
+    // 整篇追问提交带来源知识点：AI 提取时顺带判断是否关联
+    const sourceNode = await this.resolveSourceNode(row.sourceNodeId);
+    const decision = await this.extractMeta(row.questionText, row.answerText, user, req, sourceNode);
+    return { decision, content: row.answerText, ...(sourceNode ? { sourceNode } : {}) };
   }
 
   @Post('admin/submissions/:id/approve')
@@ -183,10 +245,13 @@ export class SubmissionsController {
     const decision = body.decision || {};
     const title = String(decision.title || '').trim().slice(0, 80);
     if (!title) throw new BadRequestException('标题不能为空');
+    // AI 判断相关（且管理员未在审核预览里取消勾选）才关联来源知识点
+    const sourceNode = await this.resolveSourceNode(row.sourceNodeId);
+    const links = sourceNode && decision.relateToSource !== false ? [sourceNode.id] : [];
 
     const node = await this.createAiNodeFromAnswer({
       title, category: decision.category, tags: decision.tags,
-      content: row.answerText,
+      content: row.answerText, links,
       createdBy: row.submittedBy || '',
       submissionId: row.id,
       profileTags: body.profileTags ? JSON.stringify(body.profileTags) : row.profileTags,

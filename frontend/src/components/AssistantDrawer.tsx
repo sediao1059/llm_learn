@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Drawer, Button, Select, Input, Tag, Modal, Rate, Spin, message, Popconfirm,
+  Drawer, Button, Select, Input, Tag, Modal, Rate, Spin, message, Popconfirm, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, SendOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, RobotOutlined, MenuOutlined,
+  ExpandAltOutlined, CompressOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/auth';
 import { useResponsive } from '../hooks/useResponsive';
@@ -72,6 +73,12 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
   // 手机端：抽屉全屏、会话列表收进嵌套抽屉（桌面固定左栏 190px 不变）
   const { isMobile } = useResponsive();
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  // 放大模式（桌面）：640 ↔ min(1152px, 94vw)，偏好本地记忆（手机本就全屏，不提供）
+  const [enlarged, setEnlarged] = useState(() => localStorage.getItem('llm_assistant_enlarged') === '1');
+  const toggleEnlarge = () => setEnlarged(v => {
+    localStorage.setItem('llm_assistant_enlarged', v ? '' : '1');
+    return !v;
+  });
 
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
@@ -415,13 +422,21 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
   return (
     <>
       <Drawer
-        open={open} onClose={onClose} width={isMobile ? '100%' : 640}
+        open={open} onClose={onClose}
+        width={isMobile ? '100%' : (enlarged ? 'min(1152px, 94vw)' : 640)}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>💬 AI 助手</span>
             <span style={{ fontSize: 12, color: '#999', fontWeight: 400 }}>我的会话 · 仅自己可见</span>
           </div>
         }
+        extra={!isMobile && (
+          <Tooltip title={enlarged ? '还原抽屉宽度' : '放大抽屉（长回答看得更宽）'}>
+            <Button type="text" size="small"
+              icon={enlarged ? <CompressOutlined /> : <ExpandAltOutlined />}
+              onClick={toggleEnlarge} />
+          </Tooltip>
+        )}
         styles={{ body: { padding: 0 } }}
       >
         <div style={{ display: 'flex', height: '100%' }}>
