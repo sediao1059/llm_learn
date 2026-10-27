@@ -16,10 +16,13 @@ import { KnowledgeService } from '../knowledge/knowledge.service';
 
 const PATH_SYSTEM = `你是「LLM 学习知识图谱」的学习路线规划师。围绕用户的学习目标和水平画像，规划一条阶段清晰、可执行、目标人群看得懂的学习路线。
 - 路线是多层树：阶段 → 主题 → 子主题（最多三层）
+- 阶段就是难度阶梯：第一阶段落在用户当前水平上（新手从零起步、老手直击进阶），阶段从易到难逐级爬升，相邻阶段之间要有明显的难度台阶
 - 阶段 3~6 个，每阶段 3~8 个主题；每个主题的 why 用一句大白话说清「学它干嘛、解决什么问题」，不写空话
+- 每个阶段同时给 goal（这一阶段学什么）和 milestone（过关标准）：milestone 用 1~2 句自测式的话说清「学完能做到什么」（可验证的行为，如「能独立跑通一个 RAG demo 并说清每步为什么」），不写空话
+- 核心优先：优先排出「学会就能解决 80% 问题」的核心内容，宁可少而精，不用细枝末节凑主题数
 - 规划完全以用户目标和水平为准绳，不被已有知识体系绑架：用户是新手就按新手认知顺序铺路，老手直击进阶，不必迁就知识库的深浅与结构
 - 「相关知识点参考」只是可选素材：确实贴合路线才引用（在 refId 填对应 id）；不合适就按学习规律自拟主题，宁可完全不用也不硬凑
-严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":"","children":[]}]}]}`;
+严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","milestone":"","items":[{"title":"","refId":"","why":"","children":[]}]}]}`;
 
 /** 把文本拆成字符二元组集合（中英通用的轻量相似度基元，无需分词） */
 function bigrams(text: string): Set<string> {
@@ -77,7 +80,34 @@ export class PathsController {
 
     const lv = user.profileTags?.level === 'expert' ? '老手（跳过入门直击进阶）' : '新手（从打地基开始）';
     const focus = (user.profileTags?.focus || []).join('、') || '未指定';
-    let prompt = `【用户画像】大模型${lv}；关注方向：${focus}\n\n`;
+
+    // 生成偏好（定制弹窗可选）：白名单映射成提示词注入——主题水平可覆盖画像，时间影响体量，风格影响编排；不选则只用画像
+    const prefs = body.prefs || {};
+    const prefLevelText: Record<string, string> = {
+      zero: '这个主题目前零基础：即使与画像不符，本次也严格从零铺路',
+      basic: '这个主题已有一定基础：跳过最基础的部分，直接从进阶内容排起',
+      prof: '这个主题已比较熟练：跳过常规内容，只排高阶深化与盲区补齐',
+    };
+    const prefWeeklyText: Record<string, string> = {
+      low: '每周可投入少于 3 小时（路线要更精简聚焦，砍掉枝节）',
+      half: '每周可投入 3~7 小时',
+      daily: '每周可投入 7~15 小时',
+      full: '每周可投入 15 小时以上（可以排得更全面）',
+    };
+    const prefStyleText: Record<string, string> = {
+      practice: '动手实践优先（多排可上手的实验与 demo）',
+      theory: '先懂原理再动手（把机制与原理排在实操前面）',
+      interview: '面试求职导向（对齐高频考点与常见追问）',
+      project: '项目交付导向（围绕做出一个完整项目来编排）',
+    };
+    const prefLines = [
+      ...(prefLevelText[prefs.level] ? [prefLevelText[prefs.level]] : []),
+      ...(prefWeeklyText[prefs.weekly] ? [prefWeeklyText[prefs.weekly]] : []),
+      ...(Array.isArray(prefs.style) ? prefs.style.map((s: string) => prefStyleText[s]).filter(Boolean) : []),
+    ];
+
+    let prompt = `【用户画像】大模型${lv}；关注方向：${focus}\n`;
+    prompt += prefLines.length ? `【本次生成偏好】\n${prefLines.map(l => `- ${l}`).join('\n')}\n\n` : '\n';
     prompt += lines.length
       ? `【相关知识点参考】（按学习目标检索，仅供参考——贴合才引用，不合适完全不用，不要为了凑数硬套）\n${lines.join('\n')}\n\n`
       : `【相关知识点参考】未检索到与目标强相关的已有知识点，请完全按学习目标自行规划。\n\n`;
@@ -105,6 +135,7 @@ export class PathsController {
       const stages = (raw.stages || []).slice(0, 8).map((st: any) => ({
         title: String(st.title || '').slice(0, 40),
         goal: String(st.goal || '').slice(0, 120),
+        milestone: String(st.milestone || '').slice(0, 160),
         items: clean(st.items).slice(0, 12),
       }));
       if (!stages.length) throw new Error('路线没有阶段');
@@ -189,9 +220,10 @@ export class PathsController {
 
     const system = `你是学习路线编辑助手。用户想把一个新知识点插入到已有学习路线的最合适位置。
 - 只在合适的阶段插入这个知识点（标题 + refId + 一句大白话 why），不改动其他内容
-- 如果需要可以在现有阶段中插入，也可以新建一个阶段（仅在确实需要时）
+- 如果需要可以在现有阶段中插入，也可以新建一个阶段（仅在确实需要时；新建阶段同样给 goal 与 milestone 过关标准——用 1~2 句自测式的话说清学完能做到什么）
+- 插入位置要符合路线从易到难的阶梯顺序，把知识点放进难度最匹配的阶段
 - 输出更新后的完整路线 JSON（格式与输入完全相同）
-严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","items":[{"title":"","refId":"","why":""}]}]}`;
+严格输出 JSON：{"title":"","summary":"","stages":[{"title":"","goal":"","milestone":"","items":[{"title":"","refId":"","why":""}]}]}`;
 
     const userPrompt = `【当前路线 JSON】
 ${row.tree}
@@ -337,7 +369,8 @@ id: ${nodeId}
 - 具体例子、表格优先于抽象长段落；公式出现前先用文字说清它在算什么、为什么要算
 - 不写空话套话（「赋能」「闭环」「范式」之类），不用名词堆砌充数
 - 输出标准 markdown：小节用 ##、子节用 ###；适当使用列表、表格、代码块
-- 内容 800~2000 字，自成一体：这个主题是什么 → 为什么需要它 → 核心原理 → 上手示例 → 常见坑
+- 内容 800~2000 字，自成一体：这个主题是什么 → 为什么需要它 → 核心原理 → 上手示例 → 常见坑 → 自测一下
+- 结尾「## 自测一下」小节：3~5 个回忆式自测问题（不给答案），必须能靠本篇内容答出来，每题后用括号标注答案所在小节，答不上来就回看对应小节
 - 与已有知识点清单相关的内容可以自然提一句（用知识点标题），但不要罗列清单
 - 严格按用户画像调整深浅（新手多比喻多翻译；老手可直给参数与工程取舍，但结论仍要先说人话），不要输出与主题无关的寒暄`;
 

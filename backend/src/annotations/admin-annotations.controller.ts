@@ -109,7 +109,7 @@ export class AdminAnnotationsController {
         const model = await this.prisma.llmModel.findFirst({ where: { isGlobal: 1, status: 'enabled' } });
         if (!model) throw new Error('全局模型不可用');
         const r = await llm.chatText(model as any, {
-          system: `你是资深大模型技术面试官。基于笔记内容出一套「高频面试题」：4~6 道题，每题先提问再给 2~4 句参考答案（只用笔记里的知识）。参考答案要直白：第一句直接给出答案要点，再补关键细节；术语第一次出现用括号说清大白话意思；不写空话套话。markdown 编号列表输出。`,
+          system: `你是资深大模型技术面试官。基于笔记内容出一套「高频面试题」：4~6 道题，每题先提问再给 2~4 句参考答案（只用笔记里的知识）。参考答案要直白：第一句直接给出答案要点，再补关键细节；术语第一次出现用括号说清大白话意思；不写空话套话。题目按由易到难排列：先概念理解，再原理辨析，最后场景应用；其中至少 1 道费曼式题（要求把某个概念用大白话讲给完全新手听）。markdown 编号列表输出。`,
           user: `【笔记标题】${note.title}\n\n【笔记正文】\n${note.content}`,
           timeoutMs: 240_000,
         });

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Modal, Input, Button, Tag, Collapse, message, Progress } from 'antd';
+import { Modal, Input, Button, Tag, Collapse, message, Progress, Select } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
 import { trackLlmCall } from '../../utils/llmQueueNotice';
 
@@ -66,6 +66,14 @@ function StepProgress({ startTime, done }: { startTime: number; done: boolean })
   );
 }
 
+// 学习偏好（可多选）：值与后端白名单一一对应，服务端负责翻译成提示词
+const STYLE_OPTIONS = [
+  { value: 'practice', label: '🛠 动手实践' },
+  { value: 'theory', label: '📖 先懂原理' },
+  { value: 'interview', label: '💼 面试导向' },
+  { value: 'project', label: '📦 项目导向' },
+];
+
 export default function GenerateModal({
   open, onClose, pathId, onSaved,
 }: {
@@ -80,6 +88,11 @@ export default function GenerateModal({
   const [genStartTime, setGenStartTime] = useState(0);
   const [genDone, setGenDone] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // 生成偏好（可选）：主题水平可覆盖账号画像；时间与偏好影响路线体量和编排风格
+  const [prefLevel, setPrefLevel] = useState('auto');
+  const [prefWeekly, setPrefWeekly] = useState('');
+  const [prefStyles, setPrefStyles] = useState<string[]>([]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, generating]);
 
@@ -97,7 +110,9 @@ export default function GenerateModal({
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
       };
-      const payload = pathId ? { pathId, feedback: text } : { goal: text };
+      const payload = pathId
+        ? { pathId, feedback: text, prefs: { level: prefLevel, weekly: prefWeekly, style: prefStyles } }
+        : { goal: text, prefs: { level: prefLevel, weekly: prefWeekly, style: prefStyles } };
       const r = await trackLlmCall(fetch('/api/ai/paths/generate', {
         method: 'POST', headers, body: JSON.stringify(payload),
       }));
@@ -188,6 +203,43 @@ export default function GenerateModal({
         ))}
         <div ref={endRef} />
       </div>
+      {!generating && (
+        <div style={{
+          marginBottom: 10, padding: '8px 10px',
+          border: '1px solid #f0f0f0', borderRadius: 8, background: '#fafafa',
+        }}>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>
+            偏好（可选，影响路线怎么排；不选就按你的账号画像来）
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <Select size="small" style={{ minWidth: 132 }} value={prefLevel} onChange={setPrefLevel} title="该主题的当前水平，可覆盖账号画像（如画像为老手、但这个主题是零基础）"
+              options={[
+                { value: 'auto', label: '水平：按我的画像' },
+                { value: 'zero', label: '水平：零基础' },
+                { value: 'basic', label: '水平：有一定基础' },
+                { value: 'prof', label: '水平：比较熟练' },
+              ]} />
+            <Select size="small" style={{ minWidth: 138 }} value={prefWeekly} onChange={setPrefWeekly} title="每周能投入的学习时间，路线体量随它调整"
+              options={[
+                { value: '', label: '时间：不限' },
+                { value: 'low', label: '时间：<3 小时/周' },
+                { value: 'half', label: '时间：3~7 小时/周' },
+                { value: 'daily', label: '时间：7~15 小时/周' },
+                { value: 'full', label: '时间：15 小时+/周' },
+              ]} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#8c8c8c' }}>偏好：</span>
+            {STYLE_OPTIONS.map(o => (
+              <Tag.CheckableTag key={o.value} checked={prefStyles.includes(o.value)}
+                onChange={on => setPrefStyles(prev =>
+                  on ? [...prev, o.value] : prev.filter(x => x !== o.value))}>
+                {o.label}
+              </Tag.CheckableTag>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8 }}>
         <Input.TextArea
           value={input} onChange={e => setInput(e.target.value)}

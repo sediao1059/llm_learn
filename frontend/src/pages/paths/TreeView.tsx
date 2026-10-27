@@ -9,6 +9,7 @@ interface PathTree {
   stages: {
     title: string;
     goal?: string;
+    milestone?: string;
     items: { title: string; refId?: string; why?: string; children?: any[] }[];
   }[];
 }
@@ -114,7 +115,8 @@ export default function TreeView({ path, progress, refTitles, onLevelChange, onB
             ),
             children: (
               <>
-                {st.goal && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>🎯 {st.goal}</p>}
+                {st.goal && <p style={{ color: '#8c8c8c', fontSize: 12, margin: 0, marginBottom: st.milestone ? 4 : 8 }}>🎯 {st.goal}</p>}
+                {st.milestone && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>✅ 过关标准：{st.milestone}</p>}
                 {st.items.map((item, ii) => (
                   <TopicRow
                     key={ii}

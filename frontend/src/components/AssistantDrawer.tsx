@@ -4,7 +4,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined, SendOutlined, EditOutlined, DeleteOutlined, LoadingOutlined, RobotOutlined, MenuOutlined,
-  ExpandAltOutlined, CompressOutlined,
+  ExpandAltOutlined, CompressOutlined, AuditOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../store/auth';
 import { useResponsive } from '../hooks/useResponsive';
@@ -12,7 +12,7 @@ import MarkdownContent from './MarkdownContent';
 import { showQueuedNotice, hideQueueNotice, trackLlmCall } from '../utils/llmQueueNotice';
 
 interface ChatItem {
-  id: number; title: string; createdBy: string;
+  id: number; title: string; mode?: string; createdBy: string;
   createdAt: string; updatedAt: string; lastMessage: string; messageCount: number;
 }
 interface Msg {
@@ -158,9 +158,9 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loadingMsgs]);
 
-  const newChat = async () => {
+  const newChat = async (mode?: string) => {
     try {
-      const d = await jsonFetch('/ai/chats', 'POST');
+      const d = await jsonFetch('/ai/chats', 'POST', mode === 'quiz' ? { mode } : undefined);
       await Promise.resolve(loadChats());
       selectChat(d.chat.id);
     } catch (e: any) { message.error(e.message || '新建会话失败'); }
@@ -317,11 +317,24 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
       return (
         <div style={{ margin: 'auto', textAlign: 'center', color: '#999', padding: '0 30px' }}>
           <RobotOutlined style={{ fontSize: 40, color: '#d5d8de', marginBottom: 12 }} />
-          <div style={{ fontWeight: 600, color: '#666', marginBottom: 4 }}>向 AI 助手提问</div>
-          <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-            浏览图谱时随时来这里问问题（支持多轮对话）<br />
-            满意的回答可「✨ 沉淀为知识点」，审核通过后进入图谱
-          </div>
+          {isQuiz ? (
+            <>
+              <div style={{ fontWeight: 600, color: '#666', marginBottom: 4 }}>📝 考我 · 主动回忆测验</div>
+              <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                发一个主题开始考试，例如「考我注意力机制」<br />
+                AI 一次只出一道题，答完判分再出下一题、由易到难爬台阶<br />
+                想收卷就说「结束」，AI 会总结答对率和薄弱点
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontWeight: 600, color: '#666', marginBottom: 4 }}>向 AI 助手提问</div>
+              <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                浏览图谱时随时来这里问问题（支持多轮对话）<br />
+                满意的回答可「✨ 沉淀为知识点」，审核通过后进入图谱
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -340,7 +353,8 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
         );
       }
       const qid = lastQid;
-      const showDeposit = m.id && qid && !streaming;
+      // 考我会话的回答是判分/出题内容，不提供沉淀入口（服务端同样拦截）
+      const showDeposit = m.id && qid && !streaming && !isQuiz;
       return (
         <div key={i} style={{ marginBottom: 14 }}>
           {m.thinking ? (
@@ -370,13 +384,21 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
 
   const d = preview?.decision;
 
+  // 当前会话是「考我」测验模式（mode 由会话列表下发；后端 sendMessage 按它切换考官提示词）
+  const currentChat = chats.find(c => c.id === currentChatId);
+  const isQuiz = currentChat?.mode === 'quiz';
+
   // 会话列表：桌面固定在抽屉左侧 190px；手机由聊天区顶部「☰ 会话」按钮唤出的嵌套抽屉承载（同一份 JSX 复用）
   const sessionList = (
     <div style={{
       height: '100%', display: 'flex', flexDirection: 'column', background: '#fafbfc',
     }}>
-      <div style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-        <Button size="small" block icon={<PlusOutlined />} onClick={newChat}>新会话</Button>
+      <div style={{ padding: 8, borderBottom: '1px solid #f0f0f0', display: 'flex', gap: 6 }}>
+        <Button size="small" block icon={<PlusOutlined />} onClick={() => newChat()}>新会话</Button>
+        <Tooltip title="严格考官一次一题：判分纠错、由易到难爬台阶，说「结束」看薄弱点总结">
+          <Button size="small" block icon={<AuditOutlined />} onClick={() => newChat('quiz')}
+            style={{ background: '#fffbe6', borderColor: '#fadb14' }}>📝 考我</Button>
+        </Tooltip>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {chats.length ? chats.map(c => (
@@ -393,7 +415,9 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
             <div style={{
               fontSize: 13, fontWeight: c.id === currentChatId ? 600 : 400,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }} title={c.title}>{c.title}</div>
+            }} title={c.title}>
+              {c.mode === 'quiz' && <span style={{ marginRight: 4 }}>📝</span>}{c.title}
+            </div>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               fontSize: 11, color: '#999', marginTop: 2,
@@ -469,6 +493,15 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
               />
             </div>
 
+            {isQuiz && (
+              <div style={{
+                padding: '6px 12px', background: '#fffbe6', borderBottom: '1px solid #ffe58f',
+                fontSize: 12, color: '#8c6d1f', lineHeight: 1.6,
+              }}>
+                📝 考我模式：发主题（如「考我 KV Cache」）开始，一次一题、答完判分再出下一题；说「结束」收卷看薄弱点总结
+              </div>
+            )}
+
             <div ref={msgsRef} style={{
               flex: 1, overflowY: 'auto', padding: 14,
               display: messages.length || loadingMsgs ? 'block' : 'flex',
@@ -482,7 +515,9 @@ export default function AssistantDrawer({ open, onClose }: { open: boolean; onCl
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 6 }}
-                placeholder={currentChatId ? '输入问题，点「发送」按钮发送（回车换行）' : '输入问题开始新对话，点「发送」按钮发送'}
+                placeholder={isQuiz
+                  ? (currentChatId ? '输入要考的主题，或作答当前题目（回车换行）' : '输入要考的主题开始测验，点「发送」按钮发送')
+                  : (currentChatId ? '输入问题，点「发送」按钮发送（回车换行）' : '输入问题开始新对话，点「发送」按钮发送')}
                 disabled={!user}
               />
               <Button type="primary" icon={<SendOutlined />} loading={streaming}

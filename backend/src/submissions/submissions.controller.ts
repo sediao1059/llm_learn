@@ -63,6 +63,7 @@ export class SubmissionsController {
       // 会话个人可见：只能沉淀自己会话里的问答（防拿别人 messageId 越权提交）
       const chat = await this.prisma.aiChat.findUnique({ where: { id: q.chatId } });
       if (!chat || chat.createdBy !== user.username) throw new BadRequestException('只能沉淀自己会话里的问答');
+      if (chat.mode === 'quiz') throw new BadRequestException('「考我」测验会话不支持沉淀为知识点');
       chatId = q.chatId; questionId = q.id; answerId = a.id;
       questionText = q.content; answerText = a.content;
     } else {
@@ -162,6 +163,12 @@ export class SubmissionsController {
     });
   }
 
+  /** 「考我」测验会话的回答是判分/出题内容，不允许沉淀为知识点（前端隐藏入口，服务端兜底校验） */
+  private async ensureDepositAllowed(chatId: number) {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (chat?.mode === 'quiz') throw new BadRequestException('「考我」测验会话不支持沉淀为知识点');
+  }
+
   @Post('ai/knowledge/preview')
   @Roles('admin')
   async preview(@Body() body: any, @CurrentUser() user: CurrentUserType, @Req() req: Request) {
@@ -171,6 +178,7 @@ export class SubmissionsController {
       const q = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.questionId), role: 'user' } });
       const a = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } });
       if (!q || !a || q.chatId !== a.chatId) throw new BadRequestException('问答消息不存在或不属于同一会话');
+      await this.ensureDepositAllowed(q.chatId);
       question = q.content; answer = a.content;
     } else {
       question = String(body.question || '').trim().slice(0, 2000);
@@ -190,6 +198,7 @@ export class SubmissionsController {
     if (body.answerId) {
       const a = await this.prisma.aiMessage.findFirst({ where: { id: Number(body.answerId), role: 'assistant' } });
       if (!a) throw new BadRequestException('回答消息不存在');
+      await this.ensureDepositAllowed(a.chatId);
       content = a.content;
     } else {
       content = String(body.content || '').trim().slice(0, 20000);
