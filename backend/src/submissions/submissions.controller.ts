@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { parseLlmJson } from '../llm/llm-json';
 import { abortSignalFromClient } from '../llm/llm-queue';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 
@@ -127,8 +128,7 @@ export class SubmissionsController {
     });
     if (!r.ok) throw new BadRequestException('标题提取失败：' + r.error);
     try {
-      const start = r.text.indexOf('{'); const end = r.text.lastIndexOf('}');
-      const decision = JSON.parse(r.text.slice(start, end + 1));
+      const decision = parseLlmJson(r.text);
       decision.title = String(decision.title || '').trim().slice(0, 80);
       decision.category = String(decision.category || '').trim().slice(0, 60);
       decision.tags = (Array.isArray(decision.tags) ? decision.tags : [])

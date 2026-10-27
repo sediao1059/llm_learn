@@ -9,8 +9,9 @@ import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { parseLlmJson } from '../llm/llm-json';
 import { UploadGraphService } from './upload-graph.service';
-import { UploadFileService, IMAGE_SIZE_LIMIT } from './upload-file.service';
+import { UploadFileService, IMAGE_SIZE_LIMIT, fixMultipartFileName } from './upload-file.service';
 
 @Controller()
 @UseGuards(JwtAuthGuard, LlmBanGuard)
@@ -28,7 +29,9 @@ export class UploadsController {
 
   private pub(u: any, items: any[], withContent = false) {
     return {
-      id: u.id, kind: u.kind, url: u.sourceUrl, title: u.title, note: u.note, fileName: u.fileName,
+      id: u.id, kind: u.kind, url: u.sourceUrl, title: u.title, note: u.note,
+      // 修复乱码前入库的记录 file_name 仍是 latin1 误解码的值，读取时顺手纠正，不动历史数据
+      fileName: fixMultipartFileName(u.fileName),
       status: u.status, errorMsg: u.errorMsg, rejectReason: u.rejectReason,
       submittedBy: u.submittedBy, createdAt: u.createdAt,
       decidedAt: u.decidedAt, decidedBy: u.decidedBy,
@@ -82,6 +85,7 @@ export class UploadsController {
     @CurrentUser() user: CurrentUserType,
   ) {
     if (!files?.length) throw new BadRequestException('请选择要上传的文件');
+    for (const f of files) f.originalname = fixMultipartFileName(f.originalname);
     const isDocx = (f: Express.Multer.File) =>
       f.originalname.toLowerCase().endsWith('.docx') ||
       f.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -211,7 +215,7 @@ export class UploadsController {
       const baseRules = `- 每个知识点的 markdown 第一行必须是「> **一句话**：…」大白话摘要：外行能听懂，能打比方就打比方
 - 正文直白表述：术语第一次出现紧跟括号翻译，先说结论再展开，不写空话套话`;
       const imageRule = `- 图片是核心内容：在讲到对应内容的位置用 ![](img-N) 原样引用图片（N 从 0 开始，按给出顺序编号），保持图文对照；只能引用给出的编号，不要编造`;
-      const jsonRule = `严格输出 JSON：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]}`;
+      const jsonRule = `严格输出 JSON（直接输出 JSON 本体，不要包代码块，字符串内的引号用 \\" 转义即可，不要对整段 JSON 再转义一层）：{"collection":{"mode":"new 或 merge","title":"","summary":"","mergeId":""},"items":[{"title":"","content":"","tags":[],"links":[]}]}`;
       const system = up.kind === 'url'
         ? `你是知识采集引擎。把网页文章拆解成 1~5 个知识点（markdown 笔记+检索标签+关联已有 id+专栏建议）。
 ${baseRules}
@@ -240,8 +244,7 @@ ${jsonRule}`;
         timeoutMs: 300_000,
       });
       if (!r.ok) throw new Error(r.error);
-      const start = r.text.indexOf('{'); const end = r.text.lastIndexOf('}');
-      const raw = JSON.parse(r.text.slice(start, end + 1));
+      const raw = parseLlmJson(r.text);
       if (!raw.items?.length) throw new Error('拆解结果没有有效知识点');
 
       // 图片占位符 → 公开图片地址；模型写法不规范（[[img-N]]、（img-N）等变体）也兜住

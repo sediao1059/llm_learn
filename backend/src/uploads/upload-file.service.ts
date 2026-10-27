@@ -20,6 +20,18 @@ export const IMAGE_SIZE_LIMIT = 5 * 1024 * 1024;
 /** Word 内嵌插图最多解析张数（超出的在正文中注明） */
 export const DOCX_IMAGE_LIMIT = 10;
 
+/**
+ * 还原 multipart 文件名：浏览器按 UTF-8 字节发送 filename，而 multer 底层的 busboy 默认按 latin1 解码
+ * 且 multer 不透传 defParamCharset，中文名会变成「å·¥ä¸…」乱码。
+ * 只在字符全部落在 latin1 范围且回转结果是合法 UTF-8 时才回转，已正确解码的名字原样保留。
+ */
+export function fixMultipartFileName(name: string): string {
+  const s = String(name || '');
+  if (!s || /[^\u0000-\u00ff]/.test(s)) return s;
+  const fixed = Buffer.from(s, 'latin1').toString('utf8');
+  return fixed.includes('\uFFFD') ? s : fixed;
+}
+
 @Injectable()
 export class UploadFileService {
   /** 压缩图片：长边 ≤2048、JPEG q85；仍 ≥5M 再降档 1600px/q70；最终仍 ≥5M 抛错 */

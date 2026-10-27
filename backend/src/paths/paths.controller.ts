@@ -9,6 +9,7 @@ import { LlmBanGuard } from '../auth/guards/llm-ban.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { CurrentUser, CurrentUserType } from '../auth/current-user.decorator';
 import { LlmService } from '../llm/llm.service';
+import { parseLlmJson } from '../llm/llm-json';
 import { abortSignalFromClient } from '../llm/llm-queue';
 import { joinFlight, finishFlight } from '../llm/sse-flight';
 import { KnowledgeService } from '../knowledge/knowledge.service';
@@ -93,8 +94,7 @@ export class PathsController {
     });
     if (!r.ok) throw new BadRequestException('生成失败：' + r.error);
     try {
-      const start = r.text.indexOf('{'); const end = r.text.lastIndexOf('}');
-      const raw = JSON.parse(r.text.slice(start, end + 1));
+      const raw = parseLlmJson(r.text);
       // 清洗 refId
       const clean = (items: any[]): any[] => (items || []).map((it: any) => ({
         title: String(it.title || '').slice(0, 60),
@@ -215,9 +215,7 @@ id: ${nodeId}
 
     // 解析并校验
     try {
-      const start = r.text.indexOf('{');
-      const end = r.text.lastIndexOf('}');
-      const raw = JSON.parse(r.text.slice(start, end + 1));
+      const raw = parseLlmJson(r.text);
       // 基本校验
       if (!raw.stages?.length) throw new Error('没有阶段');
       // 确保新 nodeId 已加入
