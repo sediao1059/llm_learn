@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Modal, Input, Button, Tag, Collapse, message, Progress, Select } from 'antd';
+import { Modal, Input, Button, Tag, Collapse, message, Progress, Segmented } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
 import { trackLlmCall } from '../../utils/llmQueueNotice';
 
@@ -89,9 +89,9 @@ export default function GenerateModal({
   const [genDone, setGenDone] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // 生成偏好（可选）：主题水平可覆盖账号画像；时间与偏好影响路线体量和编排风格
+  // 生成偏好（可选）：主题水平可覆盖账号画像；节奏与偏好影响路线体量和编排风格
   const [prefLevel, setPrefLevel] = useState('auto');
-  const [prefWeekly, setPrefWeekly] = useState('');
+  const [prefPace, setPrefPace] = useState('');
   const [prefStyles, setPrefStyles] = useState<string[]>([]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, generating]);
@@ -111,8 +111,8 @@ export default function GenerateModal({
         Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,
       };
       const payload = pathId
-        ? { pathId, feedback: text, prefs: { level: prefLevel, weekly: prefWeekly, style: prefStyles } }
-        : { goal: text, prefs: { level: prefLevel, weekly: prefWeekly, style: prefStyles } };
+        ? { pathId, feedback: text, prefs: { level: prefLevel, pace: prefPace, style: prefStyles } }
+        : { goal: text, prefs: { level: prefLevel, pace: prefPace, style: prefStyles } };
       const r = await trackLlmCall(fetch('/api/ai/paths/generate', {
         method: 'POST', headers, body: JSON.stringify(payload),
       }));
@@ -208,28 +208,34 @@ export default function GenerateModal({
           marginBottom: 10, padding: '8px 10px',
           border: '1px solid #f0f0f0', borderRadius: 8, background: '#fafafa',
         }}>
-          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
             偏好（可选，影响路线怎么排；不选就按你的账号画像来）
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <Select size="small" style={{ minWidth: 132 }} value={prefLevel} onChange={setPrefLevel} title="该主题的当前水平，可覆盖账号画像（如画像为老手、但这个主题是零基础）"
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: '#666' }}>水平</span>
+            <Segmented size="small" value={prefLevel} onChange={v => setPrefLevel(v as string)}
               options={[
-                { value: 'auto', label: '水平：按我的画像' },
-                { value: 'zero', label: '水平：零基础' },
-                { value: 'basic', label: '水平：有一定基础' },
-                { value: 'prof', label: '水平：比较熟练' },
-              ]} />
-            <Select size="small" style={{ minWidth: 138 }} value={prefWeekly} onChange={setPrefWeekly} title="每周能投入的学习时间，路线体量随它调整"
-              options={[
-                { value: '', label: '时间：不限' },
-                { value: 'low', label: '时间：<3 小时/周' },
-                { value: 'half', label: '时间：3~7 小时/周' },
-                { value: 'daily', label: '时间：7~15 小时/周' },
-                { value: 'full', label: '时间：15 小时+/周' },
+                { value: 'auto', label: '按画像' },
+                { value: 'zero', label: '零基础' },
+                { value: 'basic', label: '有点基础' },
+                { value: 'prof', label: '比较熟练' },
               ]} />
           </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: '#666' }}>节奏</span>
+            <Segmented size="small" value={prefPace} onChange={v => setPrefPace(v as string)}
+              options={[
+                { value: '', label: '不限' },
+                { value: 'quick', label: '⚡ 速成' },
+                { value: 'balanced', label: '均衡' },
+                { value: 'rich', label: '详细' },
+              ]} />
+          </div>
+          <div style={{ fontSize: 12, color: '#bfbfbf', margin: '2px 0 8px 38px' }}>
+            速成 = 只排最核心的；均衡 = 常规节奏；详细 = 全面铺开
+          </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#8c8c8c' }}>偏好：</span>
+            <span style={{ fontSize: 12, color: '#666' }}>偏好</span>
             {STYLE_OPTIONS.map(o => (
               <Tag.CheckableTag key={o.value} checked={prefStyles.includes(o.value)}
                 onChange={on => setPrefStyles(prev =>

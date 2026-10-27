@@ -88,11 +88,10 @@ export class PathsController {
       basic: '这个主题已有一定基础：跳过最基础的部分，直接从进阶内容排起',
       prof: '这个主题已比较熟练：跳过常规内容，只排高阶深化与盲区补齐',
     };
-    const prefWeeklyText: Record<string, string> = {
-      low: '每周可投入少于 3 小时（路线要更精简聚焦，砍掉枝节）',
-      half: '每周可投入 3~7 小时',
-      daily: '每周可投入 7~15 小时',
-      full: '每周可投入 15 小时以上（可以排得更全面）',
+    const prefPaceText: Record<string, string> = {
+      quick: '想速成：只排核心中的核心，用最短路径见效，砍掉一切枝节',
+      balanced: '按常规节奏来：核心优先，兼顾必要的覆盖面',
+      rich: '时间充裕：可以全面铺开，深浅兼顾',
     };
     const prefStyleText: Record<string, string> = {
       practice: '动手实践优先（多排可上手的实验与 demo）',
@@ -102,7 +101,7 @@ export class PathsController {
     };
     const prefLines = [
       ...(prefLevelText[prefs.level] ? [prefLevelText[prefs.level]] : []),
-      ...(prefWeeklyText[prefs.weekly] ? [prefWeeklyText[prefs.weekly]] : []),
+      ...(prefPaceText[prefs.pace] ? [prefPaceText[prefs.pace]] : []),
       ...(Array.isArray(prefs.style) ? prefs.style.map((s: string) => prefStyleText[s]).filter(Boolean) : []),
     ];
 
