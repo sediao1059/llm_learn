@@ -1,12 +1,16 @@
+import { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
-import GraphPage from './pages/graph';
-import PathsPage from './pages/paths';
-import UploadPage from './pages/upload';
-import MyUploadsPage from './pages/my-uploads';
-import LibraryPage from './pages/library';
-import RecentPage from './pages/recent';
-import AdminPage from './pages/admin';
+import PageLoading from './components/PageLoading';
+
+// 路由级懒加载：首屏只加载当前页代码（管理页 13 个页签、学习路线、上传页等不再打进首包）
+const GraphPage = lazy(() => import('./pages/graph'));
+const LibraryPage = lazy(() => import('./pages/library'));
+const RecentPage = lazy(() => import('./pages/recent'));
+const PathsPage = lazy(() => import('./pages/paths'));
+const UploadPage = lazy(() => import('./pages/upload'));
+const MyUploadsPage = lazy(() => import('./pages/my-uploads'));
+const AdminPage = lazy(() => import('./pages/admin'));
 
 export default function App() {
   return (

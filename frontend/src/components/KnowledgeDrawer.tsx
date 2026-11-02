@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Drawer, Tag, Button, Popover, Tooltip, Modal, Input, message,
-  Divider, Empty, FloatButton,
+  Divider, Empty, FloatButton, Spin,
 } from 'antd';
 import {
   LeftOutlined, RightOutlined, PlusOutlined, LoadingOutlined,
   ExpandAltOutlined, CompressOutlined, StarOutlined, StarFilled,
-  RobotOutlined, MessageOutlined,
+  RobotOutlined, MessageOutlined, ShareAltOutlined,
 } from '@ant-design/icons';
 import MarkdownContent from './MarkdownContent';
 import AnnotationModal from '../pages/graph/AnnotationModal';
@@ -50,6 +50,10 @@ export interface KnowledgeDrawerProps {
   belongsToCollection?: { id: string; title: string } | null;
   userRole?: string;
   isLoggedIn?: boolean;
+  /** 正文按需加载中（bundle 只带元数据，正文拉取期间正文区显示加载态） */
+  contentLoading?: boolean;
+  /** 是否显示分享按钮（图谱知识点可分享；「我的提交」未入库内容 / 路线合成主题不分享），默认显示 */
+  shareEnabled?: boolean;
   onAnnotationSaved?: () => void;
   annotations?: any[];
 }
@@ -63,7 +67,8 @@ export default function KnowledgeDrawer({
   routeId, routeTitle, routeSummary, inRoute, onExtendRoute, extending,
   linkedNodes, onOpenLinked,
   columnArticles, belongsToCollection,
-  userRole, isLoggedIn, onAnnotationSaved,
+  userRole, isLoggedIn, contentLoading, shareEnabled = true,
+  onAnnotationSaved,
   annotations = [],
 }: KnowledgeDrawerProps) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -167,6 +172,29 @@ export default function KnowledgeDrawer({
     window.getSelection()?.removeAllRanges();
   };
 
+  // 分享：手机拉起系统分享面板（微信好友 / 朋友圈都在里面），电脑复制链接粘贴分享；
+  // 落地页是后端渲染的卡片（带本篇标题 + 摘要 + 站点图标），打开后自动跳回图谱这篇知识
+  const share = async () => {
+    const url = `${location.origin}/api/knowledge/share/${encodeURIComponent(nodeId)}`;
+    const title = String(nodeData?.title || nodeId);
+    const text = nodeData?.summary ? String(nodeData.summary).slice(0, 80) : 'LLM 学习知识图谱里的一篇知识';
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return; // 用户主动取消，不算失败
+        // 其余异常降级为复制链接
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
+      message.success('分享链接已复制：粘贴到微信聊天或朋友圈，卡片自带标题与摘要');
+    } catch {
+      message.error('复制失败，请手动复制页面地址栏链接分享');
+    }
+  };
+
   const openNote = async () => {
     try {
       const r = await fetch(`/api/notes?nodeId=${nodeId}`, {
@@ -266,6 +294,11 @@ export default function KnowledgeDrawer({
               <Button type="text" size="small" icon={<RobotOutlined />}
                 onClick={askAI} />
             </Tooltip>
+            {shareEnabled && (
+              <Tooltip title="分享：手机上可直接发微信好友 / 朋友圈（自带标题摘要），电脑上复制链接">
+                <Button type="text" size="small" icon={<ShareAltOutlined />} onClick={share} />
+              </Tooltip>
+            )}
             {isLoggedIn && (
               <Tooltip title={fav ? '取消收藏（顶栏 ⭐ 收藏可随时找回）' : '收藏这篇笔记（仅自己可见）'}>
                 <Button type="text" size="small"
@@ -323,8 +356,15 @@ export default function KnowledgeDrawer({
               </div>
             )}
 
-            {/* Markdown 正文 */}
-            <MarkdownContent content={displayContent} />
+            {/* Markdown 正文（静态笔记按需拉取，未到时正文区先转圈） */}
+            {contentLoading && !displayContent ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#999' }}>
+                <Spin />
+                <div style={{ marginTop: 10, fontSize: 12 }}>正在加载正文…</div>
+              </div>
+            ) : (
+              <MarkdownContent content={displayContent} />
+            )}
 
             {/* 专栏文章：本节点是专栏聚合节点时按序号单列成员文章（不混入下方关联知识点） */}
             {columnArticles && columnArticles.length > 0 && (

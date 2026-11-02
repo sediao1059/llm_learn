@@ -10,9 +10,9 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | **NestJS 10 + Prisma + MySQL**（TypeScript，46 个源文件） |
-| 前端 | **React 18 + Ant Design 5 + Vite**（TypeScript，28 个源文件） |
-| 图谱 | ECharts 5 |
+| 后端 | **NestJS 10 + Prisma + MySQL**（TypeScript，60 个源文件） |
+| 前端 | **React 18 + Ant Design 5 + Vite**（TypeScript，56 个源文件；路由级懒加载 + ECharts 按需引入，首屏 JS gzip 约 577KB） |
+| 图谱 | ECharts 5（按需注册：力导向 / 折线 / 饼图） |
 | LLM | 双协议客户端（openai 兼容 / anthropic），SSE 流式 |
 
 ## 目录结构
@@ -23,8 +23,8 @@ llm_learn/
 │   ├── src/               # 16 个业务模块
 │   ├── prisma/schema.prisma  # 25 张表完整模型
 │   └── package.json
-├── frontend/              # React 前端（端口 3000，dev 代理到 8080）
-│   ├── src/pages/         # graph / paths / upload / admin 四页
+├── frontend/              # React 前端（端口 3100，dev 代理到 9100）
+│   ├── src/pages/         # graph / library / recent / paths / upload / my-uploads / admin 七页（路由懒加载）
 │   ├── src/components/    # 共享组件（KnowledgeDrawer / MarkdownContent 等）
 │   └── src/store/        # Zustand 状态（auth）
 ├── SPEC.md / AGENTS.md / README.md
@@ -44,7 +44,7 @@ npm run start:dev       # → http://127.0.0.1:8080/api
 # 2. 前端
 cd frontend
 npm install
-npm run dev             # → http://127.0.0.1:3000
+npm run dev             # → http://127.0.0.1:3100（/api 代理到后端）
 ```
 
 ## 部署（llm.fixbug.fun）
@@ -81,6 +81,7 @@ npm run dev             # → http://127.0.0.1:3000
 - **用户体系**：注册（邀请码 + 画像 + 默认路线）/ 登录（可勾选记住账号密码，存本机浏览器）/ 角色（第一个注册的用户是超级管理员，不可禁用/不可撤管；其他管理员由管理页分配）/ 禁用 / AI 禁用 / 资料编辑 / 管理员备注（管理页用户管理可给用户写一条仅管理员可见的备注）
 - **版本管理**：顶栏版本徽章（hover 浮窗展示**最近 3 个版本**的更新内容，分组呈现）+ 管理端 CRUD（发布/编辑时一个「对用户可见」开关——关闭则该版本仅管理员可见 🔒，用户徽章与公开接口整条不出现）；**发布记录自动登记**——每个功能性更新在 `backend/version.releases.json` 台账登记一条（大 major / 中 minor / 小 patch 三档），部署后后端启动时自动写入版本管理（按内容指纹幂等，多环境/并发不重复不重号；纯 UI 微调、仅管理员功能/配置、部署与开发运维向改动不必登记）
 - **手机 / iPad 适配**：窄屏（<1024px，iPad 竖屏及以下）自动切换移动布局——顶栏导航收进 ☰ 汉堡抽屉、功能按钮图标化、用户区收进 👤 下拉；手机端笔记浮窗 / AI 助手 / 学习内容抽屉全屏（助手会话列表由「☰ 会话」按钮唤出）；图谱画布支持触屏单指拖拽平移 + 双指捏合缩放；学习路线页与上传页改单列（路线列表收成顶部下拉）；各页表格窄屏横向滑动；桌面端（≥1024px）布局与交互完全不变
+- **知识分享**：每篇知识的浮窗标题栏有「分享」按钮——手机上直接拉起系统分享面板（可发微信好友 / 朋友圈，卡片自带该篇标题、摘要与站点图标），电脑上一键复制链接粘贴分享；对方点开是这篇知识的卡片页并自动跳进图谱打开原文（静态笔记与 ✨ AI 沉淀 / 📤 上传 / 📚 专栏节点都支持）
 - **开发者联系方式**：顶栏右侧常驻邮箱链接（✉ sediao666@qq.com，点击唤起邮件客户端）
 
 ## Git

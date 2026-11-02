@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Spin, Input, Select, Button, Badge, Tooltip, Popover, Segmented } from 'antd';
 import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
-import * as echarts from 'echarts';
+import echarts, { EChartsType } from '../../utils/echarts';
 import { api } from '../../api/client';
 import { useKnowledgeBase } from '../../hooks/useKnowledgeBase';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -24,7 +24,7 @@ const baseNodeSize = (deg: number) => 30 + Math.min(deg * 7, 30);
 
 export default function GraphPage() {
   const chartRef = useRef<HTMLDivElement>(null);
-  const chart = useRef<echarts.ECharts | null>(null);
+  const chart = useRef<EChartsType | null>(null);
   const { isMobile } = useResponsive(); // 手机端：筛选面板纵向堆叠、起点面板贴边
   const { data, aiData, user } = useKnowledgeBase();
   const [selected, setSelected] = useState<string | null>(null);

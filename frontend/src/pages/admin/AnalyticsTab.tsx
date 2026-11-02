@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Card, Row, Col, Statistic, Table, Spin } from 'antd';
-import * as echarts from 'echarts';
+import echarts from '../../utils/echarts';
 
 const headers = () => ({
   Authorization: `Bearer ${localStorage.getItem('llm_learn_token')}`,

@@ -2,14 +2,18 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../store/auth';
 
-// bundle 全量数据在会话内只拉一次（模块级缓存，多页面/浮窗共享同一份请求）
+// bundle 全量元数据在会话内只拉一次（模块级缓存，多页面/浮窗共享同一份请求）
 let bundleCache: any = null;
 let bundlePromise: Promise<any> | null = null;
 
-/** 管理端改笔记后清掉会话级 bundle 缓存并通知所有已挂载的 hook 立即重拉 */
+// 正文按需缓存：nodeId → content（bundle 只含元数据，打开笔记浮窗时按篇拉取）
+const contentCache = new Map<string, string>();
+
+/** 管理端改笔记后清掉会话级 bundle/正文缓存并通知所有已挂载的 hook 立即重拉 */
 export function invalidateKnowledgeBundle() {
   bundleCache = null;
   bundlePromise = null;
+  contentCache.clear();
   window.dispatchEvent(new Event('kg:knowledge-bundle-updated'));
 }
 
@@ -64,6 +68,16 @@ export function useKnowledgeBase() {
     data?.nodes.find((n: any) => n.id === id) || aiData?.nodes?.find((n: any) => n.id === id) || null,
     [data, aiData]);
 
+  /** 按需拉单篇正文：AI 动态层节点自带 content 直接用；静态笔记走 note-content 接口（会话级缓存） */
+  const loadContent = useCallback(async (nodeId: string): Promise<string> => {
+    const cached = contentCache.get(nodeId);
+    if (cached !== undefined) return cached;
+    const r = await api.get(`/knowledge/note-content/${encodeURIComponent(nodeId)}`);
+    const content = String(r.data?.content || '');
+    contentCache.set(nodeId, content);
+    return content;
+  }, []);
+
   /** 节点的关联知识点（存在的才返回） */
   const linkedNodesOf = useCallback((node: any) =>
     node?.links?.map((id: string) => {
@@ -99,5 +113,5 @@ export function useKnowledgeBase() {
     await api.put('/progress', { nodeId: refId, level });
   }, []);
 
-  return { data, aiData, progress, findNode, linkedNodesOf, columnArticlesOf, collectionOf, setLevel, user };
+  return { data, aiData, progress, findNode, loadContent, linkedNodesOf, columnArticlesOf, collectionOf, setLevel, user };
 }

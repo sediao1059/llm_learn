@@ -19,6 +19,7 @@ export default function UploadItemReadDrawer({ item, onClose }: UploadItemReadDr
       nodeId={`upload-item-${item?.id ?? ''}`}
       nodeData={item ? { title: item.title, content: item.content, tags: item.tags } : null}
       isLoggedIn={false}
+      shareEnabled={false}
       annotations={[]}
     />
   );

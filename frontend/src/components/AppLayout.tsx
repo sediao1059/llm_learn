@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, Tag, Space, Tooltip, message, Drawer, Dropdown } from 'antd';
 import {
@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../store/auth';
 import { useTour, isTourDone } from '../store/tour';
 import { useResponsive } from '../hooks/useResponsive';
+import PageLoading from './PageLoading';
 import LoginModal from './LoginModal';
 import ProfileModal from './ProfileModal';
 import AssistantDrawer from './AssistantDrawer';
@@ -275,7 +276,12 @@ export default function AppLayout() {
           <a href="mailto:sediao666@qq.com" style={{ fontSize: 12, color: '#86909c' }}>✉ sediao666@qq.com</a>
         </div>
       </Drawer>
-      <Content><Outlet /></Content>
+      <Content>
+        {/* 页面级懒加载（Suspense 挂在内容区：切换页面时顶栏保留，只有内容区转圈） */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet />
+        </Suspense>
+      </Content>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={onLoginSuccess} />
       <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />

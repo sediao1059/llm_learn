@@ -76,12 +76,25 @@ export class KnowledgeService {
     };
   }
 
+  /** 对外序列化：去掉每篇正文（content），只留图谱结构元数据——
+   *  正文改为打开笔记浮窗时按需拉取（note-content 端点），首屏数据不随知识库增长线性膨胀 */
+  private serializeMeta(obj: any): string {
+    return JSON.stringify({
+      ...obj,
+      nodes: obj.nodes.map((n: any) => {
+        const { content, ...meta } = n;
+        return meta;
+      }),
+    });
+  }
+
   async getBundleJson(): Promise<string> {
     const key = await this.fingerprint();
     if (this.cache.json && this.cache.key === key) return this.cache.json;
     const rows = await this.prisma.note.findMany({ orderBy: { id: 'asc' } });
     const obj = this.computePayload(rows as any);
-    this.cache = { key, json: JSON.stringify(obj), obj, gz: null };
+    // json / gz 为瘦身版（无正文）对外下发；obj 保留全量正文供服务端内部使用（路线检索、沉淀提取等）
+    this.cache = { key, json: this.serializeMeta(obj), obj, gz: null };
     return this.cache.json;
   }
 
@@ -94,6 +107,38 @@ export class KnowledgeService {
     await this.getBundleJson();
     if (!this.cache.gz) this.cache.gz = gzipSync(Buffer.from(this.cache.json, 'utf8'));
     return this.cache.gz;
+  }
+
+  /** 单篇笔记正文（公开；bundle 已瘦身，正文由笔记浮窗按需拉取） */
+  async getNoteContent(id: string): Promise<string | null> {
+    const note = await this.prisma.note.findUnique({ where: { id }, select: { content: true } });
+    return note ? note.content || '' : null;
+  }
+
+  /** 把 markdown 转成纯文本并截断（分享卡片的摘要兜底） */
+  private plainExcerpt(md: string | null | undefined, len = 100): string {
+    return String(md || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!?\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/[#>*`~|\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, len);
+  }
+
+  /** 分享卡片数据：静态笔记优先（带一句话摘要），回退 AI 节点（✨ 沉淀 / 📤 上传 / 📚 专栏） */
+  async getShareMeta(id: string): Promise<{ title: string; summary: string } | null> {
+    const note = await this.prisma.note.findUnique({
+      where: { id },
+      select: { title: true, summary: true, content: true },
+    });
+    if (note) return { title: note.title, summary: note.summary || this.plainExcerpt(note.content) };
+    const ai = await this.prisma.aiNode.findUnique({
+      where: { id },
+      select: { title: true, content: true },
+    });
+    if (ai) return { title: ai.title, summary: this.plainExcerpt(ai.content) };
+    return null;
   }
 
   /** 「最近更新」可选登录：带有效会话才合并 AI 沉淀层（与图谱动态层可见性一致，无效会话静默降级为仅静态笔记） */

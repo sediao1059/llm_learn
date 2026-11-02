@@ -77,7 +77,7 @@ export default function GuideTour({
         // React 的 onMouseUp 挂在容器上，需从容器冒泡才能触发
         content.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       } catch { /* 演示失败不影响引导继续 */ }
-    }, 700);
+    }, 1200);
   };
   const leaveAnnoDemo = () => {
     window.clearTimeout(demoTimer.current);
@@ -176,7 +176,8 @@ export default function GuideTour({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, demoNodeId, openAssistant, openNode]);
 
-  /** 步骤推进器：跨页步骤先导航，到位后等一帧再展示；进入/离开时执行演示效果 */
+  /** 步骤推进器：跨页步骤先导航，到位后等锚点元素出现再展示（页面懒加载首次挂载有网络延迟，
+   *  等不到 3 秒兜底显示——退回 body 居中卡片，引导不至于中断）；进入/离开时执行演示效果 */
   useEffect(() => {
     if (!type) { setShown(false); return; }
     const def = steps[step];
@@ -187,11 +188,26 @@ export default function GuideTour({
       return;
     }
     let cancelled = false;
-    const raf = requestAnimationFrame(() => { if (!cancelled) setShown(true); });
+    let timer: number | undefined;
+    const show = () => { if (!cancelled) setShown(true); };
+    if (def.target) {
+      const found = () => (def.target!.startsWith('.')
+        ? document.querySelector(def.target!)
+        : document.getElementById(def.target!));
+      const t0 = Date.now();
+      const poll = () => {
+        if (cancelled) return;
+        if (found() || Date.now() - t0 > 3000) show();
+        else timer = window.setTimeout(poll, 80);
+      };
+      poll();
+    } else {
+      timer = window.setTimeout(show, 50);
+    }
     def.onEnter?.();
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf);
+      if (timer) window.clearTimeout(timer);
       def.onLeave?.();
     };
   }, [type, step, steps, loc.pathname, nav]);
